@@ -4,14 +4,22 @@ import os
 ex = Experiment()
 
 @ex.config
-def filter_config():
+def test_config():
     quotient_bits=20
     remainder_bits=9
     num_queries=1000000
+    distribution = 'uniform' # [u]niform or [z]ipfian
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries):
-    os.system('./bench/run_test.sh %s %s %s' % (quotient_bits, remainder_bits, num_queries))
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, distribution, filter='adaptive'):
+    d = distribution[0]
+    if filter == 'adaptive':
+        os.system('make clean && make test_throughput_adaptive')
+        os.system('./test_throughput_adaptive %s %s %s %s > output.txt' % (quotient_bits, remainder_bits, num_queries, d));
+    elif filter == 'nonAdaptive':
+        os.system('make clean && make test_throughput_nonAdaptive')
+        os.system('./test_throughput_nonAdaptive %s %s %s %s > output.txt' % (quotient_bits, remainder_bits, num_queries, d));
+
 
 
 @ex.automain

@@ -88,16 +88,5 @@ int main(int argc, char **argv)
 	if (ret.exit_code) {
 		printf("Test failed\n");
 	}
-
-	/*for (int i = 0; i < num_inserts; i++) {
-		query_set[i] = rand_zipfian(1.5f, 10000000ull, query_set[i]);
-		query_set[i] = MurmurHash64A(&query_set[i], sizeof(query_set[i]), murmur_seed);
-	}
-	
-	ret = run_throughput_test(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "zipf_i.csv", "zipf_q.csv");
-	if (ret.exit_code) {
-		printf("Test failed\n");
-	}*/
-
 	return 0;
 }
