@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <openssl/rand.h>
 #include <vector>
+#include <unordered_map>
 
 extern "C"{
 #include "include/hashutil.h"
@@ -54,9 +55,6 @@ test_results_t run_adversarial_test(size_t qbits, size_t rbits, uint64_t *insert
 		return results;
 	}
 
-	uint64_t num_ski_counters = (1ULL << (qbits + rbits + 3));
-	uint64_t *ski_counter = (uint64_t *)malloc(num_ski_counters * sizeof(uint64_t));
-	memset(ski_counter, 0, num_ski_counters * sizeof(uint64_t));
 
 
 	double target_load = 0.9f;
@@ -104,6 +102,7 @@ test_results_t run_adversarial_test(size_t qbits, size_t rbits, uint64_t *insert
 	}
 	results.insert_throughput = (double)i * 1000000 / (end_time - start_time);
 
+	std::unordered_map<uint64_t,uint64_t> ski_counter;
 
 	size_t adv_set_size = 0, curr_adv_query = 0;
 	uint64_t *adv_queries = (uint64_t *)malloc(adv_set_max_size * sizeof(uint64_t));
@@ -139,7 +138,7 @@ test_results_t run_adversarial_test(size_t qbits, size_t rbits, uint64_t *insert
 					uint64_t ski_counter_id = ((hash & minirun_id_bitmask) << 3) + minirun_rank;
 					fp_count++;
 					adv_succ++;
-					if (still_have_space && ski_counter[ski_counter_id]) {
+					if (still_have_space && ski_counter.find(ski_counter_id)!=ski_counter.end()) {
 						hash = (hash & minirun_id_bitmask) << (64 - qf.metadata->quotient_remainder_bits);
 						slice bm_query = padded_slice(&hash, MAX_KEY_SIZE, sizeof(hash), buffer, 0);
 						splinterdb_lookup(bm, bm_query, &bm_result);
@@ -276,11 +275,7 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 		return results;
 	}
 
-	uint64_t num_ski_counters = (1ULL << (qbits + rbits+ 3));
-	uint64_t size_for_ski_counter = num_ski_counters << 3;
-	fprintf(stderr, "%lu %lu\n", num_ski_counters, size_for_ski_counter);
-	uint64_t *ski_counter = (uint64_t *)malloc(size_for_ski_counter);
-	memset(ski_counter, 0, size_for_ski_counter);
+	std::unordered_map<uint64_t,uint64_t> ski_counter;
 
 	double target_load = 0.9f;
 	size_t max_inserts = num_slots * target_load;
@@ -363,7 +358,7 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 			//if (true) {
 				fp_count++;
 				uint64_t ski_counter_id = ((hash & minirun_id_bitmask) << 3) + minirun_rank;
-				if (still_have_space && ski_counter[ski_counter_id]) {
+				if (still_have_space && ski_counter.find(ski_counter_id)!=ski_counter.end()) {
 					hash = (hash & minirun_id_bitmask) << (64 - qf.metadata->quotient_remainder_bits);
 					slice bm_query = padded_slice(&hash, MAX_KEY_SIZE, sizeof(hash), buffer, 0);
 					splinterdb_lookup(bm, bm_query, &bm_result);
@@ -630,6 +625,9 @@ test_results_t measure_buyCost_ratio(size_t qbits, size_t rbits, uint64_t *inser
 	qf_free(&qf);
 	return results;
 }
+
+
+
 
 int main(int argc, char **argv)
 {
