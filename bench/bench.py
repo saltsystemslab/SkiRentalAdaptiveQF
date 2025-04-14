@@ -21,7 +21,7 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, distribution, f
         os.system('./test_throughput_nonAdaptive %s %s %s %s > output.txt' % (quotient_bits, remainder_bits, num_queries, d));
     elif filter == 'DAdaptive':
         os.system('make clean && make test_throughput_DskiAdaptive')
-        os.system('./test_throughput_skiAdaptive %s %s %s %s > output.txt' % (quotient_bits, remainder_bits, num_queries, d));
+        os.system('./test_throughput_DskiAdaptive %s %s %s %s > output.txt' % (quotient_bits, remainder_bits, num_queries, d));
 
 
 @ex.automain
