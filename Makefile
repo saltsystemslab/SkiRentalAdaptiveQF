@@ -1,5 +1,5 @@
-CTARGETS=unit_test test_throughput test_throughput_nonAdaptive test_throughput_adaptive
-CXXTARGETS=
+CTARGETS=unit_test test_throughput 
+CXXTARGETS= test_throughput_nonAdaptive test_throughput_adaptive test_throughput_DskiAdaptive
 
 ifndef D
 	DEBUG=
@@ -9,7 +9,7 @@ ifndef D
 else
 	DEBUG=-g
 	OPT=-O0
-	SPLINTERPATH=external/splinterdb/build/debug/lib
+	SPLINTERPATH=external/splinterdb/build/release/lib
 	#SPLINTERPATH=external/splinterdb/btree
 endif
 
@@ -41,7 +41,7 @@ LDFLAGS = $(DEBUG) $(PROFILE) $(OPT) -lpthread -lssl -lcrypto -lm -L$(SPLINTERPA
 # declaration of dependencies
 #
 
-all: $(CTARGETS) #$(CXXTARGETS)
+all: $(CTARGETS) $(CXXTARGETS)
 
 # dependencies between programs and .o files
 
@@ -58,6 +58,10 @@ test_throughput_nonAdaptive:			$(OBJDIR)/test_throughput_nonAdaptive.o $(OBJDIR)
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 
 test_throughput_adaptive:				$(OBJDIR)/test_throughput_adaptive.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
+										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
+										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+
+test_throughput_DskiAdaptive:				$(OBJDIR)/test_throughput_DskiAdaptive.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 
@@ -95,7 +99,7 @@ $(OBJDIR)/%.o: $(LOC_TEST)/%.c | $(OBJDIR)
 	$(CC) $(CXXFLAGS) $(INCLUDE) $< -c -o $@
 
 $(OBJDIR)/%.o: $(LOC_TEST)/%.cc | $(OBJDIR)
-	$(CC) $(CXXFLAGS) $(INCLUDE) $< -c -o $@
+	$(CXX) $(CXXFLAGS) -c $(INCLUDE) $< -o $@
 
 $(OBJDIR):
 	@mkdir -p $(OBJDIR)
