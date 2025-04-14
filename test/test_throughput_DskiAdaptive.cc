@@ -570,7 +570,7 @@ test_results_t measure_buyCost_ratio(size_t qbits, size_t rbits, uint64_t *inser
 	end_time = tv.tv_sec * 1000000 + tv.tv_usec;
 	end_clock = clock();
 	if (verbose) {
-		printf("Time to query false positive queries:     %f s\n", (double)(end_time - start_time) / 1000000);
+		printf("Time to query false positive queries:     %f s", (double)(end_time - start_time) / 1000000);
 	}
 
 	splinterdb_close(&db);
