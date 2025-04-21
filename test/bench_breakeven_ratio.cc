@@ -337,7 +337,6 @@ test_results_t run_adaptiveSetup_test(size_t qbits, size_t rbits, uint64_t *inse
 	FILE *inserts_file = inserts_outfile ? fopen(inserts_outfile, "w") : NULL;
 	if (inserts_file) fprintf(inserts_file, "fill through\n");
 
-	if (verbose) fprintf(stderr, "Performing insertions... 0.00%%");
 	uint64_t num_updates = 0;
 	clock_t start_clock = clock(), end_clock;
 	struct timeval tv;
@@ -379,7 +378,6 @@ test_results_t run_adaptiveSetup_test(size_t qbits, size_t rbits, uint64_t *inse
 	uint64_t hash;
 	int minirun_rank;
 
-	if (verbose) fprintf(stderr, "Performing queries... 0.00%%");
 	start_clock = clock();
 	gettimeofday(&tv, NULL);
 	start_time = tv.tv_sec * 1000000 + tv.tv_usec;
@@ -416,7 +414,6 @@ test_results_t run_adaptiveSetup_test(size_t qbits, size_t rbits, uint64_t *inse
 
 
 	if (queries_file) fprintf(queries_file, "%lu %f %f\n", i, (double)(i - prev_point) * 1000000 / (end_time - interval_time), (double)fp_count / i);
-	if (verbose) fprintf(stderr, "\rPerforming queries... 100.00%%\n");
 
 	if (verbose) {
 		printf("Time for queries:     %f s\n", (double)(end_time - start_time) / 1000000);
@@ -504,7 +501,6 @@ test_results_t run_db_throughput(size_t qbits, size_t rbits, uint64_t *insert_se
 	int minirun_rank;
     uint64_t x = 0;
 
-	if (verbose) fprintf(stderr, "Performing queries... 0.00%%");
 	start_clock = clock();
 	gettimeofday(&tv, NULL);
 	start_time = interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
@@ -610,11 +606,10 @@ test_results_t run_reversemap_throughput(size_t qbits, size_t rbits, uint64_t *i
 	int minirun_rank;
     uint64_t x = 0;
 
-	if (verbose) fprintf(stderr, "Performing queries... 0.00%%");
 	start_clock = clock();
 	gettimeofday(&tv, NULL);
 	start_time = interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
-	for (i = 0; i < query_set_len; i++) {
+	for (i = 0; i < query_set_len && i < insert_set_len; i++) {
 		    minirun_rank = qf_query_using_ll_table(&qf, insert_set[i], &hash, QF_KEY_IS_HASH);
             fp_count++;
 		    hash = (hash & minirun_id_bitmask); // << (64 - qf.metadata->quotient_remainder_bits);
@@ -668,23 +663,23 @@ int main(int argc, char **argv)
 	RAND_bytes((unsigned char*)query_set, num_queries * sizeof(uint64_t));
 
 	if (dist == 'd') {
-        fprintf(stdout, "\nDB throughput (Only Empty Queries, No Filter):\n");
+        fprintf(stdout, "DB throughput (Only Empty Queries, No Filter):\n");
 	    ret = run_db_throughput(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
 	}
 	if (dist == 'r') {
-        fprintf(stdout, "\nReverseMap throughput (Only NonEmpty Queries, No Filter):\n");
+        fprintf(stdout, "ReverseMap throughput (Only NonEmpty Queries, No Filter):\n");
 	    ret = run_reversemap_throughput(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
     }
 	if (dist == 'n') {
-        fprintf(stdout, "\nNonAdaptive (filtered, batched) throughput:\n");
+        fprintf(stdout, "NonAdaptive (filtered, batched) throughput:\n");
 	    ret = run_nonAdaptiveSetup_test(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
     }
 	if (dist == 'a') {
-        fprintf(stdout, "\nAdaptive (filtered, batched) throughput:\n");
+        fprintf(stdout, "Adaptive (filtered, batched) throughput:\n");
 	    ret = run_adaptiveSetup_test(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
     }
 	if (dist == 'f') {
-        fprintf(stdout, "\nFilter throughput throughput:\n");
+        fprintf(stdout, "Filter throughput throughput:\n");
 	    ret = run_filter_test(qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
     }
 	return 0;
