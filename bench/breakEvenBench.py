@@ -8,7 +8,7 @@ def test_config():
     quotient_bits=20
     remainder_bits=9
     num_queries=1000000
-    filter = 'adaptive' # [a]daptive or [n]on-adaptive 
+    filter = 'adaptive' # [a]daptive or [n]on-adaptive, [r]everse-map, [d]atabase 
 
 @ex.capture
 def run_filter_bench(quotient_bits, remainder_bits, num_queries, filter='adaptive'):

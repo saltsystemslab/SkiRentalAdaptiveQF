@@ -601,7 +601,7 @@ test_results_t measure_buyCost_ratio(size_t qbits, size_t rbits, uint64_t *inser
 					uint64_t orig_key;
 					memcpy(&orig_key, slice_data(result_val) + minirun_rank * MAX_KEY_SIZE, sizeof(uint64_t));
 					assert((orig_key & minirun_id_bitmask) == hash);
-					qf_adapt_using_ll_table(&qf, orig_key, query_set[i], minirun_rank, QF_KEY_IS_HASH);
+					qf_adapt_using_ll_table(&qf, orig_key, fp_queries[i], minirun_rank, QF_KEY_IS_HASH);
 					if (qf.metadata->noccupied_slots >= full_point) {
 						still_have_space = 0;
 						if (verbose) fprintf(stderr, "\rFilter is full after %lu queries\n", i);
