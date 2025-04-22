@@ -1502,6 +1502,57 @@ int qf_query_using_ll_table(const QF *qf, uint64_t key, uint64_t *ret_hash, uint
 	return -1;
 }
 
+int qf_get_count_using_ll_table_with_index(const QF *qf, uint64_t key, uint64_t *ret_hash, uint8_t *ret_minirun_rank, uint64_t *ret_index, uint8_t flags) {
+	// Convert key to hash
+	if (GET_KEY_HASH(flags) != QF_KEY_IS_HASH) {
+		if (qf->metadata->hash_mode == QF_HASH_DEFAULT)
+			*ret_hash = MurmurHash64A(((void *)&key), sizeof(key), qf->metadata->seed);
+		else if (qf->metadata->hash_mode == QF_HASH_INVERTIBLE)
+			*ret_hash = hash_64(key, -1ULL);
+		else
+			*ret_hash = key;
+	}
+	else {
+		*ret_hash = key;
+	}
+	//uint64_t hash = (key << qf->metadata->value_bits) | (value & BITMASK(qf->metadata->value_bits));
+	uint64_t hash_remainder   = *ret_hash & BITMASK(qf->metadata->bits_per_slot);
+	uint64_t hash_bucket_index = (*ret_hash >> qf->metadata->bits_per_slot) & BITMASK(qf->metadata->quotient_bits);
+
+	// If no one wants this slot, we can already say for certain the item is not in the filter
+	if (!is_occupied(qf, hash_bucket_index))
+		return 0;
+
+	// Otherwise, find the start of the run (all the items that want that slot) and parse for the remainder we're looking for
+	uint64_t runstart_index = hash_bucket_index == 0 ? 0 : run_end(qf, hash_bucket_index - 1) + 1;
+	if (runstart_index < hash_bucket_index)
+		runstart_index = hash_bucket_index;
+
+	uint64_t current_index = runstart_index;
+	*ret_minirun_rank = 0;
+	do {
+		if (get_slot(qf, current_index) == hash_remainder) { // if first slot matches, check remaining extensions
+			uint64_t ext, count;
+			int ext_len, count_len;
+			get_slot_info(qf, current_index, &ext, &ext_len, &count, &count_len);
+			if (((*ret_hash >> (qf->metadata->quotient_bits + qf->metadata->bits_per_slot)) & BITMASK(qf->metadata->bits_per_slot * ext_len)) == ext) { // if extensions match, return the count
+				*ret_index = current_index;
+				return count;
+			}
+			*ret_minirun_rank++;
+			if (is_runend(qf, current_index++)) break; // if extensions don't match, stop if end of run, skip to next item otherwise
+			current_index += ext_len + count_len;
+		}
+		else { // if first slot doesn't match, stop if end of run, skip to next item otherwise
+			if (is_runend(qf, current_index++)) break;
+			while (is_extension_or_counter(qf, current_index)) current_index++;
+		}
+	} while (current_index < qf->metadata->xnslots); // stop if reached the end of all items (should never actually reach this point because should stop at the runend)
+
+	return 0;
+}
+
+
 int qf_get_count_using_ll_table(const QF *qf, uint64_t key, uint64_t *ret_hash, uint8_t *ret_minirun_rank, uint8_t flags) {
 	// Convert key to hash
 	if (GET_KEY_HASH(flags) != QF_KEY_IS_HASH) {

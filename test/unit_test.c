@@ -15,6 +15,102 @@
 #include "include/splinter_util.h"
 #include "include/test_driver.h"
 
+int test_counters() {
+	size_t qbits = 8;
+	size_t rbits = 8;
+
+	size_t num_slots = 1ull << qbits;
+	size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+
+	data_config data_cfg = qf_data_config_init();
+	splinterdb_config splinterdb_cfg = qf_splinterdb_config_init("db2", &data_cfg);
+	remove(splinterdb_cfg.filename);
+	splinterdb *db;
+	if (splinterdb_create(&splinterdb_cfg, &db)) {
+    return -1;
+	}
+	splinterdb_lookup_result db_result;
+	splinterdb_lookup_result_init(db, &db_result, 0, NULL);
+
+	data_config bm_data_cfg = qf_data_config_init();
+	splinterdb_config backing_cfg = qf_splinterdb_config_init("bm2", &bm_data_cfg);
+	remove(backing_cfg.filename);
+	splinterdb *bm;
+	if (splinterdb_create(&backing_cfg, &bm)) {
+    return -1;
+	}
+	splinterdb_lookup_result bm_result;
+	splinterdb_lookup_result_init(bm, &bm_result, 0, NULL);
+
+	QF qf;
+	if (!qf_malloc(&qf, num_slots, qbits + rbits, 0, QF_HASH_INVERTIBLE, 0)) {
+    return -1;
+	}
+
+  int num_keys = 2;
+  int min_count = 2;
+  uint64_t keys[] = {0xC1011, 0xA1010};
+  for (int i=0; i < num_keys; i++) {
+    fprintf(stderr, "Inserting key with hash %x\n", keys[i]);
+	  int ret = qf_splinter_insert_split(&qf, db, bm, keys[i], min_count + i);
+		if (ret == 1) continue;
+		if (ret == 0) {
+      fprintf(stderr, "Insertion failed at key %d: %x\n", i, keys[i]);
+      return -1;
+    };
+  }
+
+  int num_queries = 2;
+  uint64_t query_set[] = {0xC1011, 0xA1010}; 
+  char buffer[10 * MAX_VAL_SIZE];
+  uint64_t hash;
+  int minirun_rank;
+  int fp_count = 0;
+  uint8_t ret_count;
+
+  // Check if inserted count is correct
+  for (int i=0; i < num_queries; i++) {
+	ret_count = qf_get_count_using_ll_table(&qf, query_set[i], &hash, &minirun_rank, QF_KEY_IS_HASH);
+	if (ret_count != min_count+i) {
+		abort();
+	}
+  }
+
+  uint64_t hash_index;
+  uint64_t ret_hash;
+  // Increment all counters
+  for (int i=0; i < num_queries; i++) {
+	ret_count = qf_get_count_using_ll_table_with_index(&qf, query_set[i], &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH);
+	if (ret_count != min_count+i) {
+		fprintf(stderr, "returned count: %lu\n", ret_count);
+	}
+	insert_and_extend(&qf, hash_index, hash, 1, hash, &ret_hash, &ret_hash, QF_KEY_IS_HASH);
+
+	ret_count = qf_get_count_using_ll_table(&qf, query_set[i], &hash, &minirun_rank, QF_KEY_IS_HASH);
+	if (ret_count != min_count+i+1) {
+		fprintf(stderr, "returned count: %lu\n", ret_count);
+	}
+  }
+
+  #if 0
+  uint64_t adapt_set[] = {0xD1011, 0xB1010}; 
+  for (int i=0; i < num_queries; i++) {
+		qf_adapt_using_ll_table(&qf, keys[i], adapt_set[i], 0, QF_KEY_IS_HASH);
+  }
+
+  fprintf(stderr, "Count seems after adapting too!\n" );
+  fprintf(stderr, "Let's extend the count!\n" );
+  #endif
+
+	// splinterdb_close(&bm);
+  splinterdb_close(&db);
+	qf_free(&qf);
+  printf("---------- Merge setup test done! -----------\n");
+	return 0;
+
+
+}
+
 
 int test_merged_setup() { 
 	size_t qbits = 8;
@@ -155,7 +251,7 @@ int test_split_setup() {
       }
     }
   }
-  fprintf(stderr, "num false positives: %d expected fp:%d \n", fp_count, expected_false_positives);
+  fprintf(stderr, "Count seems fine!\n" );
 	// splinterdb_close(&bm);
   splinterdb_close(&db);
 	qf_free(&qf);
@@ -172,5 +268,7 @@ int main(int argc, char **argv)
   // ./unit_test 2
   } else if (test_to_run == 2) {
     test_split_setup();
+  } else if (test_to_run == 3) {
+    test_counters();
   }
 }

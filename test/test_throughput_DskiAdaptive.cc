@@ -239,7 +239,6 @@ test_results_t run_adversarial_test(size_t qbits, size_t rbits, uint64_t *insert
 }
 
 
-
 test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_set, size_t insert_set_len, uint64_t *query_set, size_t query_set_len, int verbose, char *inserts_outfile, char *queries_outfile) {
 	test_results_t results;
 	init_test_results(&results);
@@ -275,8 +274,6 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 		return results;
 	}
 
-	std::unordered_map<uint64_t,uint64_t> ski_counter;
-
 	double target_load = 0.9f;
 	size_t max_inserts = num_slots * target_load;
 	size_t num_inserts = insert_set_len > max_inserts ? max_inserts : insert_set_len;
@@ -284,8 +281,6 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 
 	size_t measure_freq = 100, curr_interval = 0;
 	size_t measure_point = num_inserts * (curr_interval + 1) / measure_freq, prev_point = 0;
-
-
 	FILE *inserts_file = inserts_outfile ? fopen(inserts_outfile, "w") : NULL;
 	if (inserts_file) fprintf(inserts_file, "fill through\n");
 
@@ -343,22 +338,22 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 	size_t full_point = num_slots * 0.95f;
 	char buffer[10 * MAX_VAL_SIZE];
 	uint64_t fp_count = 0;
-	uint64_t hash;
-	int minirun_rank;
+	uint64_t hash, hash_index, ret_hash, ret_other_hash;
+	uint8_t minirun_count;
+	uint8_t minirun_rank;
 
 	if (verbose) fprintf(stderr, "Performing queries... 0.00%%");
 	start_clock = clock();
 	gettimeofday(&tv, NULL);
 	start_time = interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
 	for (i = 0; i < query_set_len; i++) {
-		if ((minirun_rank = qf_query_using_ll_table(&qf, query_set[i], &hash, QF_KEY_IS_HASH)) >= 0) {
+		if ((minirun_count = qf_get_count_using_ll_table_with_index(&qf, query_set[i], &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH)) > 0) {
 			slice db_query = padded_slice(&query_set[i], MAX_KEY_SIZE, sizeof(query_set[i]), buffer, 0);
 			splinterdb_lookup(db, db_query, &db_result);
 			if (!splinterdb_lookup_found(&db_result)) {
 			//if (true) {
 				fp_count++;
-				uint64_t ski_counter_id = ((hash & minirun_id_bitmask) << 3) + minirun_rank;
-				if (still_have_space && ski_counter.find(ski_counter_id)!=ski_counter.end()) {
+				if (still_have_space && minirun_count > 16) {
 					hash = (hash & minirun_id_bitmask) << (64 - qf.metadata->quotient_remainder_bits);
 					slice bm_query = padded_slice(&hash, MAX_KEY_SIZE, sizeof(hash), buffer, 0);
 					splinterdb_lookup(bm, bm_query, &bm_result);
@@ -372,8 +367,13 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 						still_have_space = 0;
 						if (verbose) fprintf(stderr, "\rFilter is full after %lu queries\n", i);
 					}
+				} else {
+					fprintf(stderr, "hash: %lu rank:%lu, old_count: %lu ", hash, minirun_rank, minirun_count);
+					insert_and_extend(&qf, hash_index, hash, 1, hash, &ret_hash, &ret_other_hash, QF_KEY_IS_HASH);
+					minirun_count = qf_get_count_using_ll_table_with_index(&qf, query_set[i], &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH);
+					fprintf(stderr, "new_count: %lu\n", minirun_count);
+					fprintf(stderr, "slots used: %lu full_point: %lu\n", qf.metadata->noccupied_slots, full_point);
 				}
-				ski_counter[ski_counter_id]++;
 			}
 		}
 
