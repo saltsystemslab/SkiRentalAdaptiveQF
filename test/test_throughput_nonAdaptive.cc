@@ -262,7 +262,7 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 	gettimeofday(&tv, NULL);
 	uint64_t start_time = tv.tv_sec * 1000000 + tv.tv_usec, end_time, interval_time = start_time;
 	for (i = 0; qf.metadata->noccupied_slots < num_inserts; i++) {
-		int ret = qf_splinter_insert_split(&qf, db, bm, insert_set[i], i);
+		int ret = qf_splinter_insert_split(&qf, db, bm, insert_set[i], 1);
 		//int ret = qf_splinter_insert(&qf, bm, insert_set[i], 1);
 		if (ret == 1) continue;
 		if (ret == 0) break;

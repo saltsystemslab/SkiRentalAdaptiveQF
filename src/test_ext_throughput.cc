@@ -229,7 +229,7 @@ int insert_key(QF *qf, BACKING_MAP_T& map, uint64_t key, int count) {
                         insert_and_extend(qf, ret_index, key, count, key, &ret_hash, &ret_other_hash, QF_NO_LOCK | QF_KEY_IS_HASH);
                 }
                 else {
-                        int ext_len = insert_and_extend(qf, ret_index, key, count, item->second, &ret_hash, &ret_other_hash, QF_KEY_IS_HASH | QF_NO_LOCK);
+                        int ext_len = insert_and_extend_debug(qf, ret_index, key, count, item->second, &ret_hash, &ret_other_hash, QF_KEY_IS_HASH | QF_NO_LOCK);
                         if (ext_len == QF_NO_SPACE) {
                                 printf("filter is full after insert_and_extend\n");
                                 return 0;

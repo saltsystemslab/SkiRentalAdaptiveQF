@@ -290,8 +290,8 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	uint64_t start_time = tv.tv_sec * 1000000 + tv.tv_usec, end_time, interval_time = start_time;
-	for (i = 0; qf.metadata->noccupied_slots < num_inserts; i++) {
-		int ret = qf_splinter_insert_split(&qf, db, bm, insert_set[i], i);
+	for (i = 0; qf.metadata->noccupied_slots < num_inserts ; i++) {
+		int ret = qf_splinter_insert_split(&qf, db, bm, insert_set[i], 1);
 		//int ret = qf_splinter_insert(&qf, bm, insert_set[i], 1);
 		if (ret == 1) continue;
 		if (ret == 0) break;
@@ -336,6 +336,7 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 
 	int still_have_space = 1;
 	size_t full_point = num_slots * 0.95f;
+	fprintf(stderr, "Full point: %lu Occupied: %lu\n", full_point, qf.metadata->noccupied_slots);
 	char buffer[10 * MAX_VAL_SIZE];
 	uint64_t fp_count = 0;
 	uint64_t hash, hash_index, ret_hash, ret_other_hash;
@@ -368,11 +369,7 @@ test_results_t run_throughput_test(size_t qbits, size_t rbits, uint64_t *insert_
 						if (verbose) fprintf(stderr, "\rFilter is full after %lu queries\n", i);
 					}
 				} else {
-					fprintf(stderr, "hash: %lu rank:%lu, old_count: %lu ", hash, minirun_rank, minirun_count);
 					insert_and_extend(&qf, hash_index, hash, 1, hash, &ret_hash, &ret_other_hash, QF_KEY_IS_HASH);
-					minirun_count = qf_get_count_using_ll_table_with_index(&qf, query_set[i], &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH);
-					fprintf(stderr, "new_count: %lu\n", minirun_count);
-					fprintf(stderr, "slots used: %lu full_point: %lu\n", qf.metadata->noccupied_slots, full_point);
 				}
 			}
 		}
