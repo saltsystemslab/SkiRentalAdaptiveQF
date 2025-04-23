@@ -1,5 +1,5 @@
 CTARGETS=unit_test test_throughput 
-CXXTARGETS= test_throughput_nonAdaptive test_throughput_adaptive test_throughput_DskiAdaptive bench_breakeven_ratio
+CXXTARGETS= test_throughput_nonAdaptive test_throughput_adaptive test_throughput_DskiAdaptive bench_breakeven_ratio test_throughput_RskiAdaptive
 
 ifndef D
 	DEBUG=
@@ -62,6 +62,10 @@ test_throughput_adaptive:				$(OBJDIR)/test_throughput_adaptive.o $(OBJDIR)/gqf.
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 
 test_throughput_DskiAdaptive:				$(OBJDIR)/test_throughput_DskiAdaptive.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
+										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
+										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+
+test_throughput_RskiAdaptive:				$(OBJDIR)/test_throughput_RskiAdaptive.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 

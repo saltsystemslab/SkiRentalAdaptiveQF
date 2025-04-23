@@ -233,9 +233,11 @@ test_results_t run_throughput_test(
     size_t insert_set_len,
     uint64_t *query_set,
     size_t query_set_len,
+    int total_rounds,
     int verbose,
     char *inserts_outfile,
-    char *queries_outfile) {
+    char *queries_outfile,
+    char *round_outfile) {
   test_results_t results;
   init_test_results(&results);
 
@@ -281,6 +283,9 @@ test_results_t run_throughput_test(
   FILE *inserts_file = inserts_outfile ? fopen(inserts_outfile, "w") : NULL;
   if (inserts_file)
     fprintf(inserts_file, "fill through\n");
+  FILE *rounds_file = round_outfile ? fopen(round_outfile, "w") : NULL;
+  if (rounds_file)
+    fprintf(rounds_file, "round thput cumulative_thput fp\n");
 
   if (verbose)
     fprintf(stderr, "Performing insertions... 0.00%%");
@@ -354,34 +359,28 @@ test_results_t run_throughput_test(
   start_clock = clock();
   gettimeofday(&tv, NULL);
   start_time = interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
-  for (i = 0; i < query_set_len; i++) {
-    if ((minirun_rank = qf_query_using_ll_table(&qf, query_set[i], &hash, QF_KEY_IS_HASH)) >= 0) {
-      slice db_query = padded_slice(&query_set[i], MAX_KEY_SIZE, sizeof(query_set[i]), buffer, 0);
-      splinterdb_lookup(db, db_query, &db_result);
-      if (!splinterdb_lookup_found(&db_result)) {
-        // if (true) {
-        fp_count++;
+  double round_thput[total_rounds];
+  double round_cumulative_thput[total_rounds];
+  for (int round = 0; round < total_rounds; round++) {
+    uint64_t round_start_time = tv.tv_sec * 1000000 + tv.tv_usec;
+    for (i = 0; i < query_set_len; i++) {
+      if ((minirun_rank = qf_query_using_ll_table(&qf, query_set[i], &hash, QF_KEY_IS_HASH)) >= 0) {
+        slice db_query = padded_slice(&query_set[i], MAX_KEY_SIZE, sizeof(query_set[i]), buffer, 0);
+        splinterdb_lookup(db, db_query, &db_result);
+        if (!splinterdb_lookup_found(&db_result)) {
+          // if (true) {
+          fp_count++;
+        }
       }
     }
-
-    if (i >= measure_point) {
-      gettimeofday(&tv, NULL);
-
-      if (queries_file)
-        fprintf(
-            queries_file, "%lu %f %f\n", i,
-            (double)(i - prev_point) * 1000000 / (tv.tv_sec * 1000000 + tv.tv_usec - interval_time),
-            (double)fp_count / i);
-      if (verbose)
-        fprintf(stderr, "\rPerforming queries... %.2f%%", (double)(curr_interval + 1) / measure_freq * 100);
-
-      curr_interval++;
-      prev_point = i;
-      measure_point = query_set_len * (curr_interval + 1) / measure_freq;
-
-      gettimeofday(&tv, NULL);
-      interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
-    }
+    gettimeofday(&tv, NULL);
+    uint64_t round_end_time = tv.tv_sec * 1000000 + tv.tv_usec;
+    round_thput[round] = (double)query_set_len * 1000000 / (round_end_time - round_start_time);
+    round_cumulative_thput[round] = (double)query_set_len * (round + 1) * 1000000 / (round_end_time - start_time);
+    fprintf(rounds_file, "%d %f %f %lu\n", round, round_thput[round], round_cumulative_thput[round], fp_count);
+    fprintf(stderr, "Round %d total false positive:     %lu\n", round, fp_count);
+    fprintf(stderr, "Round %d throughput:     %f ops/sec\n", round, round_thput[round]);
+    fprintf(stderr, "Cumulative Round %d throughput:     %f ops/sec\n", round, round_cumulative_thput[round]);
   }
   gettimeofday(&tv, NULL);
   end_time = tv.tv_sec * 1000000 + tv.tv_usec;
@@ -401,6 +400,12 @@ test_results_t run_throughput_test(
 
     printf("False positives:      %lu\n", fp_count);
     printf("False positive rate:  %f%%\n", 100. * fp_count / query_set_len);
+    for (i = 0; i < total_rounds; i++) {
+      printf("Round %d throughput:     %f ops/sec\n", i, round_thput[i]);
+    }
+    for (i = 0; i < total_rounds; i++) {
+      printf("Cumulative %d throughput:     %f ops/sec\n", i, round_cumulative_thput[i]);
+    }
   }
   results.query_throughput = (double)i * 1000000 / (end_time - start_time);
   results.false_positive_rate = (double)fp_count / query_set_len;
@@ -436,17 +441,43 @@ int main(int argc, char **argv) {
   RAND_bytes((unsigned char *)insert_set, num_inserts * sizeof(uint64_t));
   uint64_t *query_set = (uint64_t *)malloc(num_queries * sizeof(uint64_t));
   RAND_bytes((unsigned char *)query_set, num_queries * sizeof(uint64_t));
-
+  uint64_t *random_set = (uint64_t *)malloc(num_queries * sizeof(uint64_t));
+  RAND_bytes((unsigned char *)random_set, num_queries * sizeof(uint64_t));
+  int total_rounds = 50;
   if (dist == 'u') {
     ret = run_throughput_test(
-        qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "query.csv");
+        qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
+        "rounds.csv");
+  }
+  if (dist == 't') { // Only true positives.
+    size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+    for (uint64_t i = 0; i < num_queries; i++) {
+      // Force a true positive by querying for inserted keys.
+      query_set[i] = (insert_set[(i % num_inserts)]);
+    }
+    ret = run_throughput_test(
+        qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
+        "rounds.csv");
+  }
+  if (dist == 'f') {
+    size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+    for (uint64_t i = 0; i < num_queries; i++) {
+      // Force a false positive by zeroing out the non-fingerprint bits.
+      query_set[i] = (insert_set[(i % num_inserts)] & minirun_id_bitmask);
+      // Add some random bits to the start.
+      query_set[i] |= (random_set[i] << (qbits + rbits));
+    }
+    ret = run_throughput_test(
+        qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
+        "rounds.csv");
   }
   if (dist == 'z') {
     for (uint64_t ii = 0; ii < num_queries; ii++) {
       query_set[ii] = (uint64_t)rand_zipfian(1.5f, 1000000ull, query_set[ii]);
     }
     ret = run_throughput_test(
-        qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "query.csv");
+        qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
+        "rounds.csv");
   }
   if (dist == 'a') {
     ret = run_adversarial_test(
