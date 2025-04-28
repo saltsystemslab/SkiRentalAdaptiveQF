@@ -2,8 +2,8 @@
 #define RSKI_ADAPTIVE_FILTER
 
 #include "qf_filter.hpp"
-#include <random>
 #include <cstddef>
+#include <random>
 
 extern "C" {
 #include "include/gqf.h"
@@ -17,7 +17,6 @@ static std::uniform_real_distribution<> dis{0.0, 1.0};
 
 template <typename ReverseMap> class RSkiAdaptiveFilter {
 public:
-
   int construct(QFilterConfig config) {
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
@@ -109,22 +108,26 @@ public:
     return 0;
   }
 
-private:
-/*
-TODO(chesetti): Double check coinflip logic.
-Hard-coded using below python script
- b = 15                                                                                                                                                                                            
- ep = (1+1/b)**b
- a = ep/(ep-1) - 1.0
- probs = []
- for i in range(1, b+1):
-     prob = a/b * (((b+1)/b)**(i-1))
-     probs.append(prob)
- print(probs)
+  double loadFactor() {
+    return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
 
- Also only works for breakEvenDay=15.
-*/
- const double prob_distribution[15] = {
+private:
+  /*
+  TODO(chesetti): Double check coinflip logic.
+  Hard-coded using below python script
+   b = 15
+   ep = (1+1/b)**b
+   a = ep/(ep-1) - 1.0
+   probs = []
+   for i in range(1, b+1):
+       prob = a/b * (((b+1)/b)**(i-1))
+       probs.append(prob)
+   print(probs)
+
+   Also only works for breakEvenDay=15.
+  */
+  const double prob_distribution[15] = {
       0.04082769035010176,
       0.043549536373441874,
       0.046452838798338,
@@ -152,8 +155,6 @@ Hard-coded using below python script
   ReverseMap reverseMap;
   size_t fullPoint;
   size_t breakEvenCount;
-
-
 
 };
 

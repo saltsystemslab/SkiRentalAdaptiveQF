@@ -17,6 +17,7 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
     os.system('./bench_variants --filter adaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
     os.system('./bench_variants --filter nonAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
     os.system('./bench_variants --filter dSkiAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
+    os.system('./bench_variants --filter rSkiAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
 
 
 @ex.automain
@@ -25,6 +26,7 @@ def run_experiment():
     ex.add_artifact('mono.csv')
     ex.add_artifact('non.csv')
     ex.add_artifact('dski.csv')
+    ex.add_artifact('rski.csv')
     pass
 
 

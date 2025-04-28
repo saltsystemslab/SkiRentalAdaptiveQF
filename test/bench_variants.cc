@@ -6,8 +6,8 @@
 #include "dski_adaptive_filter.hpp"
 #include "mono_adaptive_filter.hpp"
 #include "non_adaptive_filter.hpp"
-#include "rski_adaptive_filter.hpp"
 #include "qf_filter.hpp"
+#include "rski_adaptive_filter.hpp"
 #include "splinter_backing_store.hpp"
 
 template <typename QFilter>
@@ -23,7 +23,8 @@ int run_benchmark_with_no_db(
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp, cumulative_thput cumulative_fp\n");
+      "round round_thput round_fp, cumulative_thput cumulative_fp "
+      "load_factor\n");
   int ret = 0;
   ret = qf.construct(qfConfig);
   if (ret < 0) {
@@ -57,12 +58,13 @@ int run_benchmark_with_no_db(
         ((double)(r + 1) * (double)numQueries) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %f %lu\n",
+        "%d %f %lu %f %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
         cumulativeThroughput,
-        fpCount);
+        fpCount,
+        qf.loadFactor());
   }
   return 0;
 }
@@ -80,7 +82,8 @@ int run_benchmark(
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp, cumulative_thput cumulative_fp\n");
+      "round round_thput round_fp, cumulative_thput cumulative_fp "
+      "load_factor\n");
 
   int ret = 0;
   ret = qf.construct(qfConfig);
@@ -122,12 +125,13 @@ int run_benchmark(
         ((double)(r + 1) * (double)numQueries) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %f %lu\n",
+        "%d %f %lu %f %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
         cumulativeThroughput,
-        fpCount);
+        fpCount,
+        qf.loadFactor());
   }
   return 0;
 }

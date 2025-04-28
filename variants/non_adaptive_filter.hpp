@@ -59,6 +59,10 @@ public:
     return 0;
   }
 
+  double loadFactor() {
+    return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
+
 private:
   QF qf;
 };
