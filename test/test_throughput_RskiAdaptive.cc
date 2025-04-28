@@ -287,6 +287,146 @@ test_results_t run_adversarial_test(
   return results;
 }
 
+test_results_t run_microbenchmark_test(
+    size_t qbits,
+    size_t rbits,
+    uint64_t *insert_set,
+    size_t insert_set_len,
+    uint64_t *query_set,
+    size_t query_set_len,
+    int total_rounds,
+    int verbose,
+    char *inserts_outfile,
+    char *queries_outfile,
+    char *round_outfile) {
+  test_results_t results;
+  init_test_results(&results);
+
+  size_t num_slots = 1ull << qbits;
+  size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+
+  QF qf;
+  if (!qf_malloc(&qf, num_slots, qbits + rbits, 0, QF_HASH_INVERTIBLE, 0)) {
+    fprintf(stderr, "malloc failed\n");
+    results.exit_code = -1;
+    return results;
+  }
+
+  double target_load = 0.9f;
+  size_t max_inserts = num_slots * target_load;
+  size_t num_inserts = insert_set_len > max_inserts ? max_inserts : insert_set_len;
+  size_t i;
+
+  size_t measure_freq = 100, curr_interval = 0;
+  size_t measure_point = num_inserts * (curr_interval + 1) / measure_freq, prev_point = 0;
+
+  FILE *rounds_file = round_outfile ? fopen(round_outfile, "w") : NULL;
+  if (rounds_file)
+    fprintf(rounds_file, "round thput cumulative_thput fp\n");
+
+  uint64_t num_updates = 0;
+  clock_t start_clock = clock(), end_clock;
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  uint64_t start_time = tv.tv_sec * 1000000 + tv.tv_usec, end_time, interval_time = start_time;
+  for (i = 0; qf.metadata->noccupied_slots < num_inserts; i++) {
+	  qf_insert_result result;
+    int ret = qf_insert_using_ll_table(&qf, insert_set[i], 1, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
+    if (ret < 0) {
+      abort();
+    }
+  }
+  gettimeofday(&tv, NULL);
+  end_time = tv.tv_sec * 1000000 + tv.tv_usec;
+  end_clock = clock();
+
+  if (verbose) {
+    printf("Number of inserts:     %lu\n", i);
+    printf("Number of updates:     %lu\n", num_updates);
+    printf("Time for inserts:      %f\n", (double)(end_time - start_time) / 1000000);
+    printf("Insert throughput:     %f ops/sec\n", (double)i * 1000000 / (end_time - start_time));
+    printf("CPU time for inserts:  %f\n", (double)(end_clock - start_clock) / CLOCKS_PER_SEC);
+  }
+  results.insert_throughput = (double)i * 1000000 / (end_time - start_time);
+
+  curr_interval = 0;
+  measure_point = query_set_len * (curr_interval + 1) / measure_freq;
+  prev_point = 0;
+
+  double round_thput[total_rounds];
+  double round_cumulative_thput[total_rounds];
+  int still_have_space = 1;
+  size_t full_point = num_slots * 0.95f;
+  char buffer[10 * MAX_VAL_SIZE];
+  uint64_t fp_count = 0;
+  uint64_t hash, hash_index, ret_hash, ret_other_hash;
+  uint8_t minirun_count;
+  uint8_t minirun_rank;
+
+  for (int round = 0; round < total_rounds; round++) {
+    for (i = 0; i < query_set_len; i++) {
+      if ((minirun_rank = qf_query_using_ll_table(&qf, query_set[i], &hash, QF_KEY_IS_HASH)) >= 0) {
+        fp_count++;
+      }
+    }
+  }
+  fprintf(stderr, "Warmup round FP:%lu\n",fp_count);
+  fp_count = 0;
+
+  start_clock = clock();
+  gettimeofday(&tv, NULL);
+  start_time = interval_time = tv.tv_sec * 1000000 + tv.tv_usec;
+  for (int round = 0; round < total_rounds; round++) {
+    gettimeofday(&tv, NULL);
+    uint64_t round_start_time = tv.tv_sec * 1000000 + tv.tv_usec;
+    for (i = 0; i < query_set_len; i++) {
+      if ((minirun_count = qf_get_count_using_ll_table_with_index(
+               &qf, query_set[i], &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH)) > 0) {
+          fp_count++;
+          // hash = (hash & minirun_id_bitmask) << (64 - qf.metadata->quotient_remainder_bits);
+          if (coin_flip(minirun_count)) {
+            uint64_t orig_key = (query_set[i] & minirun_id_bitmask);
+            qf_adapt_using_ll_table(&qf, orig_key, query_set[i], minirun_rank, QF_KEY_IS_HASH);
+            if (qf.metadata->noccupied_slots >= full_point) {
+              still_have_space = 0;
+              if (verbose)
+                fprintf(stderr, "\rFilter is full after %lu queries\n", i);
+                abort();
+            }
+          }
+        }
+      }
+    gettimeofday(&tv, NULL);
+    uint64_t round_end_time = tv.tv_sec * 1000000 + tv.tv_usec;
+    round_thput[round] = (double)query_set_len * 1000000 / (round_end_time - round_start_time);
+    round_cumulative_thput[round] = (double)query_set_len * (round + 1) * 1000000 / (round_end_time - start_time);
+    fprintf(rounds_file, "%d %f %f %lu\n", round, round_thput[round], round_cumulative_thput[round], fp_count);
+    fprintf(stderr, "Round %d total false positive:     %lu\n", round, fp_count);
+    fprintf(stderr, "Round %d throughput:     %f ops/sec\n", round, round_thput[round]);
+    fprintf(
+        stderr, "time: %lu Cumulative Round %d throughput:     %f ops/sec\n", (round_end_time - start_time), round,
+        round_cumulative_thput[round]);
+  }
+  gettimeofday(&tv, NULL);
+  end_time = tv.tv_sec * 1000000 + tv.tv_usec;
+  end_clock = clock();
+
+  if (verbose) {
+    printf("Time for queries:     %f s\n", (double)(end_time - start_time) / 1000000);
+    printf("Query throughput:     %f ops/sec\n", (double)query_set_len * 1000000 / (end_time - start_time));
+    printf("CPU time for queries: %f s\n", (double)(end_clock - start_clock) / CLOCKS_PER_SEC);
+
+    printf("False positives:      %lu\n", fp_count);
+    printf("False positive rate:  %f%%\n", 100. * fp_count / query_set_len);
+  }
+  results.query_throughput = (double)i * 1000000 / (end_time - start_time);
+  results.false_positive_rate = (double)fp_count / query_set_len;
+
+  qf_free(&qf);
+  return results;
+}
+
+
 test_results_t run_throughput_test(
     size_t qbits,
     size_t rbits,
@@ -748,11 +888,11 @@ int main(int argc, char **argv) {
   uint64_t *random_set = (uint64_t *)malloc(num_queries * sizeof(uint64_t));
   RAND_bytes((unsigned char *)random_set, num_queries * sizeof(uint64_t));
 
-  int total_rounds = 50;
+  int total_rounds = 2000;
   if (dist == 'u') {
     ret = run_throughput_test(
         qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
-        "rounds.csv");
+        "rski_rounds.csv");
   }
   if (dist == 't') { // Only true positives.
     size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
@@ -762,7 +902,7 @@ int main(int argc, char **argv) {
     }
     ret = run_throughput_test(
         qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
-        "rounds.csv");
+        "rski_rounds.csv");
   }
   if (dist == 'f') {
     size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
@@ -774,9 +914,22 @@ int main(int argc, char **argv) {
     }
     ret = run_throughput_test(
         qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
-        "rounds.csv");
+        "rski_rounds.csv");
   }
   if (dist == 'm') {
+    size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+    for (uint64_t i = 0; i < num_queries; i++) {
+      // Force a false positive by zeroing out the non-fingerprint bits.
+      query_set[i] = (insert_set[(i % num_inserts)] & minirun_id_bitmask);
+      // Add some random bits to the start.
+      query_set[i] |= (random_set[i] << (qbits + rbits));
+    }
+    fprintf(stderr, "running microbenchmark test\n");
+    ret = run_microbenchmark_test(
+        qbits, rbits, insert_set, num_inserts, query_set, num_queries, total_rounds, 1, "unif_i.csv", "unif_q.csv",
+        "rski_rounds.csv");
+  }
+  if (dist == 'b') {
     ret = measure_buyCost_ratio(
         qbits, rbits, insert_set, num_inserts, query_set, num_queries, 1, "unif_i.csv", "unif_q.csv");
   }
