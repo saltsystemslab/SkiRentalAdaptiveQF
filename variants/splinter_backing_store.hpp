@@ -36,7 +36,7 @@ public:
       return -1;
   }
 
-  int getKeyAtRank(uint64_t key, int rank, uint64_t *value) {
+  int getKeyAtRank(uint64_t key, int rank, int quotient_remainder_bits, uint64_t *value) {
     uint64_t queryKey = key;
     slice db_query =
         padded_slice(&queryKey, MAX_KEY_SIZE, sizeof(key), buffer, 0);

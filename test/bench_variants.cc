@@ -9,6 +9,7 @@
 #include "qf_filter.hpp"
 #include "rski_adaptive_filter.hpp"
 #include "splinter_backing_store.hpp"
+#include "dummy_backing_store.hpp"
 
 template <typename QFilter>
 int run_benchmark_with_no_db(
@@ -205,8 +206,8 @@ int main(int argc, char **argv) {
 
   if (result["microBench"].as<bool>()) {
     if (filterType == "adaptive") {
-      MonotonicAdaptiveFilter<SplinterDBBackingStore> f;
-      run_benchmark_with_no_db<MonotonicAdaptiveFilter<SplinterDBBackingStore>>(
+      MonotonicAdaptiveFilter<DummyDBBackingStore> f;
+      run_benchmark_with_no_db<MonotonicAdaptiveFilter<DummyDBBackingStore>>(
           f,
           qfConfig,
           insertSet,
@@ -229,8 +230,8 @@ int main(int argc, char **argv) {
           "non.csv");
     }
     if (filterType == "dSkiAdaptive") {
-      DSkiAdaptiveFilter<SplinterDBBackingStore> f;
-      run_benchmark_with_no_db<DSkiAdaptiveFilter<SplinterDBBackingStore>>(
+      DSkiAdaptiveFilter<DummyDBBackingStore> f;
+      run_benchmark_with_no_db<DSkiAdaptiveFilter<DummyDBBackingStore>>(
           f,
           qfConfig,
           insertSet,
@@ -241,8 +242,8 @@ int main(int argc, char **argv) {
           "dski.csv");
     }
     if (filterType == "rSkiAdaptive") {
-      RSkiAdaptiveFilter<SplinterDBBackingStore> f;
-      run_benchmark_with_no_db<RSkiAdaptiveFilter<SplinterDBBackingStore>>(
+      RSkiAdaptiveFilter<DummyDBBackingStore> f;
+      run_benchmark_with_no_db<RSkiAdaptiveFilter<DummyDBBackingStore>>(
           f,
           qfConfig,
           insertSet,

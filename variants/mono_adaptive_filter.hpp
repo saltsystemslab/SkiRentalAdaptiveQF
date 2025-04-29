@@ -72,7 +72,8 @@ public:
     uint64_t origKey;
     uint64_t fingerprint = filterResult->hash
                            << (64 - qf.metadata->quotient_remainder_bits);
-    reverseMap.getKeyAtRank(fingerprint, filterResult->minirun_rank, &origKey);
+      reverseMap.getKeyAtRank(
+          fingerprint, filterResult->minirun_rank, qf.metadata->quotient_remainder_bits, &origKey);
     qf_adapt_using_ll_table(
         &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
     return 0;
