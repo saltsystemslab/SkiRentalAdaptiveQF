@@ -83,7 +83,7 @@ public:
     if (qf.metadata->noccupied_slots >= fullPoint) {
       return -1; // Don't have space to adapt more.
     }
-    if (coin_flip(filterResult->minirun_count)) {
+    if (!coin_flip(filterResult->minirun_count)) {
       uint64_t hash = filterResult->hash;
       uint64_t hash_index = filterResult->hash_index;
       uint64_t ret_hash, ret_other_hash; // Unused, part of API.

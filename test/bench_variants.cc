@@ -24,7 +24,7 @@ int run_benchmark_with_no_db(
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp, cumulative_thput cumulative_fp "
+      "round round_thput round_fp cumulative_thput cumulative_fp "
       "load_factor\n");
   int ret = 0;
   ret = qf.construct(qfConfig);
@@ -83,7 +83,7 @@ int run_benchmark(
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp, cumulative_thput cumulative_fp "
+      "round round_thput round_fp cumulative_thput cumulative_fp "
       "load_factor\n");
 
   int ret = 0;
