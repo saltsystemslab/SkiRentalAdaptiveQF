@@ -26,7 +26,7 @@ data_config qf_data_config_init() {
 	return data_cfg;
 }
 
-splinterdb_config qf_splinterdb_config_init(char *db_path, data_config *data_cfg) {
+splinterdb_config qf_splinterdb_config_init(const char *db_path, data_config *data_cfg) {
 	splinterdb_config splinterdb_cfg = (splinterdb_config){
 		.filename   = db_path,
 		.cache_size = 64 * Mega,

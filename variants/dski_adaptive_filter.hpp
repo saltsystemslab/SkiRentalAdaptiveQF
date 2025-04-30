@@ -23,7 +23,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap");
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits);
     breakEvenCount = config.breakEvenCount;
     return 0;
   }
@@ -38,13 +38,9 @@ public:
       if (ret < 0) {
         return -1;
       }
-
-      // Insert key into reverse map.
-      uint64_t fingerprint = result.minirun_id
-                             << (64 - qf.metadata->quotient_remainder_bits);
-      uint64_t value = keys[i];
-      ret = reverseMap.insertKV(fingerprint, value, result.minirun_existed);
-      if (ret < 0) {
+      ret = reverseMap.insertFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      if (ret) {
         return -1;
       }
     }
@@ -92,11 +88,14 @@ public:
           QF_KEY_IS_HASH);
     } else {
       uint64_t origKey;
-      uint64_t fingerprint = filterResult->hash
-                             << (64 - qf.metadata->quotient_remainder_bits);
-      reverseMap.getKeyAtRank(
-          fingerprint, filterResult->minirun_rank, qf.metadata->quotient_remainder_bits, &origKey);
-      qf_adapt_using_ll_table(
+      uint64_t fingerprint = filterResult->hash;
+      int ret = reverseMap.getFingerprint(
+          fingerprint, filterResult->minirun_rank, &origKey);
+      if (ret) {
+        printf("fingerprint fetch failed\n");
+        return -1;
+      }
+      ret = qf_adapt_using_ll_table(
           &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
     }
     return 0;
@@ -110,7 +109,7 @@ private:
   QF qf;
   ReverseMap reverseMap;
   size_t fullPoint;
-  size_t breakEvenCount;
+  int breakEvenCount;
 };
 
 #endif

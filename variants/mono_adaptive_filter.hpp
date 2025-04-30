@@ -23,7 +23,7 @@ public:
       return -1;
     }
     full_point = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap");
+    reverseMap.init("reverseMap", config.qbits + config.rbits);
 
     return 0;
   }
@@ -33,17 +33,15 @@ public:
     for (uint64_t i = 0; qf.metadata->noccupied_slots < numKeys; i++) {
       // Insert key into filter.
       qf_insert_result result;
+      result.minirun_rank = 0;
       int ret = qf_insert_using_ll_table(
           &qf, keys[i], count, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
       if (ret < 0) {
         return -1;
       }
-
-      // Insert key into reverse map.
-      uint64_t fingerprint = result.minirun_id
-                             << (64 - qf.metadata->quotient_remainder_bits);
+      uint64_t fingerprint = result.minirun_id;
       uint64_t value = keys[i];
-      ret = reverseMap.insertKV(fingerprint, value, result.minirun_existed);
+      ret = reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
       if (ret < 0) {
         return -1;
       }
@@ -70,10 +68,9 @@ public:
       return -1; // Don't have space to adapt more.
     }
     uint64_t origKey;
-    uint64_t fingerprint = filterResult->hash
-                           << (64 - qf.metadata->quotient_remainder_bits);
-      reverseMap.getKeyAtRank(
-          fingerprint, filterResult->minirun_rank, qf.metadata->quotient_remainder_bits, &origKey);
+    uint64_t fingerprint = filterResult->hash;
+    reverseMap.getFingerprint(
+        fingerprint, filterResult->minirun_rank, &origKey);
     qf_adapt_using_ll_table(
         &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
     return 0;

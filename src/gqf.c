@@ -1389,7 +1389,7 @@ static inline int insert_using_ll_table(QF *qf, qf_insert_result *result, uint64
 		} else { /* Non-empty bucket */
 
 			/* uint64_t current_remainder, current_count, current_end; */
-			uint64_t current_index = runstart_index;
+			uint64_t current_index = runstart_index, temp_index, temp_remainder;
 			uint64_t current_remainder;
 
 			uint64_t count_info;
@@ -1402,7 +1402,19 @@ static inline int insert_using_ll_table(QF *qf, qf_insert_result *result, uint64
 			do {
 				current_remainder = get_slot(qf, current_index);
 				if (current_remainder >= hash_remainder) {
-					if (current_remainder == hash_remainder) result->minirun_existed = 1;
+					if (current_remainder == hash_remainder) {
+						result->minirun_existed = 1;
+						result->minirun_rank = 0;
+						temp_index = current_index;
+						temp_remainder = current_remainder;
+						while (temp_remainder == hash_remainder) {
+							result->minirun_rank++;
+							if (is_runend(qf, temp_index)) break;
+							while (is_extension_or_counter(qf, temp_index)) temp_index++;
+							temp_index++;
+							temp_remainder = get_slot(qf, temp_index);
+						}
+					}
 					insert_index = current_index;
 					break;
 				}
@@ -1485,6 +1497,7 @@ int qf_insert_using_ll_table(QF *qf, uint64_t key, uint64_t count, qf_insert_res
 	//uint64_t hash = ((key << qf->metadata->value_bits) | (value & BITMASK(qf->metadata->value_bits)));// % qf->metadata->range;
 	
 	result->minirun_existed = 0;
+	result->minirun_rank = 0;
 	result->minirun_id = result->hash & BITMASK(qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
 	return insert_using_ll_table(qf, result, count, flags);
 }
