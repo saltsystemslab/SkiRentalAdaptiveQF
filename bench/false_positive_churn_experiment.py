@@ -2,6 +2,7 @@ from sacred import Experiment
 import os
 
 ex = Experiment()
+filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive']
 
 @ex.config
 def test_config():
@@ -10,23 +11,23 @@ def test_config():
     num_queries=20000
     microbench=False
     num_rounds=100
+    storage_engine = 'splinterDB'
+    reverse_map_engine = 'splinterDB'
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench):
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine):
     os.system('make clean && make bench_variants')
-    os.system('./bench_variants --filter adaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
-    os.system('./bench_variants --filter nonAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
-    os.system('./bench_variants --filter dSkiAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
-    os.system('./bench_variants --filter rSkiAdaptive -q %s -r %s --numQueries %s --numRounds %s --microBench=%s > output.txt' % (quotient_bits, remainder_bits, num_queries, num_rounds, microbench));
+    for filter in filters:
+        print('./bench_variants --filter %s -q %s -r %s --numQueries %s --numRounds %s --microBench=%s --storageEngine %s --reverseMapEngine %s > output.txt' % (filter, quotient_bits, remainder_bits, num_queries, num_rounds, microbench, storage_engine, reverse_map_engine));
+        os.system('./bench_variants --filter %s -q %s -r %s --numQueries %s --numRounds %s --microBench=%s --storageEngine %s --reverseMapEngine %s > output.txt' % (filter, quotient_bits, remainder_bits, num_queries, num_rounds, microbench, storage_engine, reverse_map_engine));
+        continue
 
 
 @ex.automain
 def run_experiment():
     run_filter_bench()
-    ex.add_artifact('mono.csv')
-    ex.add_artifact('non.csv')
-    ex.add_artifact('dski.csv')
-    ex.add_artifact('rski.csv')
+    for filter in filters:
+        ex.add_artifact('%s.csv' % filter)
     pass
 
 

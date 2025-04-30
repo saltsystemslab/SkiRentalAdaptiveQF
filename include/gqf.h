@@ -70,6 +70,7 @@ extern "C" {
 	struct qf_insert_result_t {
 		uint64_t hash;
 		uint64_t minirun_id;
+		uint64_t minirun_rank;
 		int minirun_existed;
 	} typedef qf_insert_result;
 

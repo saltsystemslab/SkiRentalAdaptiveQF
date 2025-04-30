@@ -5,11 +5,13 @@ ifndef D
 	DEBUG=
 	OPT=-O3 -DNDEBUG
 	SPLINTERPATH=external/splinterdb/build/release/lib
+	WTPATH=external/wiredtiger/build
 	#SPLINTERPATH=external/splinterdb/btree
 else
 	DEBUG=-g
 	OPT=-O0
 	SPLINTERPATH=external/splinterdb/build/release/lib
+	WTPATH=external/wiredtiger/build
 	#SPLINTERPATH=external/splinterdb/btree
 endif
 
@@ -32,9 +34,9 @@ CC = gcc -std=gnu11
 CXX = g++ -std=c++17
 LD= gcc -std=gnu11
 
-CXXFLAGS = -Wall $(DEBUG) $(PROFILE) $(OPT) $(ARCH) -m64 -I. -Iinclude -Iexternal/splinterdb/include -Iexternal/cxxopts/include -I variants -DSPLINTERDB_PLATFORM_DIR=platform_linux -DSKIP_BOOL_DEF -D_GNU_SOURCE
+CXXFLAGS = -Wall $(DEBUG) $(PROFILE) $(OPT) $(ARCH) -m64 -I. -Iinclude -Iexternal/splinterdb/include -Iexternal/cxxopts/include -Iexternal/wiredtiger/build/include -Ivariants -DSPLINTERDB_PLATFORM_DIR=platform_linux -DSKIP_BOOL_DEF -D_GNU_SOURCE
 
-LDFLAGS = $(DEBUG) $(PROFILE) $(OPT) -lpthread -lssl -lcrypto -lm -L$(SPLINTERPATH) -lsplinterdb -Wl,-rpath=$(SPLINTERPATH)
+LDFLAGS = $(DEBUG) $(PROFILE) $(OPT) -lpthread -lssl -lcrypto -lm -L$(SPLINTERPATH) -L$(WTPATH) -lsplinterdb -lwiredtiger -Wl,-rpath=$(SPLINTERPATH):$(WTPATH)
 #LDFLAGS += -L/usr/lib/ -lstxxl
 
 #

@@ -25,7 +25,7 @@ int merge_tuples(const data_config *cfg, slice key, message old_message, merge_a
 int merge_tuples_final(const data_config *cfg, slice key, merge_accumulator *oldest_message);
 
 data_config qf_data_config_init();
-splinterdb_config qf_splinterdb_config_init(char *db_path, data_config *data_cfg);
+splinterdb_config qf_splinterdb_config_init(const char *db_path, data_config *data_cfg);
 
 void pad_data(void *dest, const void *src, const size_t dest_len, const size_t src_len, const int flagged);
 slice padded_slice(const void *data, const size_t dest_len, const size_t src_len, void *buffer, const int flagged);
