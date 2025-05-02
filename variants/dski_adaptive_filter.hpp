@@ -2,6 +2,7 @@
 #define DSKI_ADAPTIVE_FILTER
 
 #include "qf_filter.hpp"
+#include <unordered_map>
 #include <cstddef>
 
 extern "C" {
@@ -38,6 +39,16 @@ public:
       if (ret < 0) {
         return -1;
       }
+
+    #if 0
+      std::pair<uint64_t, uint64_t> fingerprint(result.minirun_id, result.minirun_rank);
+      if (fingerprintCount.find(fingerprint) == fingerprintCount.end()) {
+        fingerprintCount[fingerprint] = 1;
+      } else {
+        fingerprintCount[fingerprint]++;
+      }
+    #endif
+
       ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
       if (ret) {
@@ -66,6 +77,23 @@ public:
     }
     result->hash = hash;
     result->minirun_rank = minirun_rank;
+    #if 0
+    if (result->key_present) {
+      std::pair<uint64_t, uint64_t> fingerprint(result->hash, result->minirun_rank);
+      if (fingerprintCount.find(fingerprint) == fingerprintCount.end()) {
+        // printf("fingerprint entry not found, bug in filter %lu %lu: expected:%lu not in map\n", result->hash, result->minirun_rank, minirun_count);
+      } else if (fingerprintCount[fingerprint] != minirun_count) {
+        // printf("fingerprint entry not found, bug in filter %lu %lu: expected:%lu in_filter:%lu\n", result->hash, result->minirun_rank, fingerprintCount[fingerprint], result->minirun_count);
+        minirun_count = qf_get_count_using_ll_table_with_index(
+             &qf,
+             queryKey,
+             &hash,
+             &minirun_rank,
+             &hash_index,
+             QF_KEY_IS_HASH);
+      }
+    }
+    #endif
     return 0;
   }
 
@@ -97,6 +125,14 @@ public:
       }
       ret = qf_adapt_using_ll_table(
           &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+      
+      #if 0
+      queryFilter(queryKey, filterResult);
+      if (filterResult->key_present) {
+        // Bug -> should not hapen.
+        queryFilter(queryKey, filterResult); // FOr debugging.
+      }
+      #endif
     }
     return 0;
   }
@@ -110,6 +146,12 @@ private:
   ReverseMap reverseMap;
   size_t fullPoint;
   int breakEvenCount;
+
+#if 0
+  std::map< std::pair<uint64_t, uint64_t>, uint64_t> fingerprintCount;
+#endif 
+
+
 };
 
 #endif

@@ -1588,7 +1588,7 @@ int qf_get_count_using_ll_table_with_index(const QF *qf, uint64_t key, uint64_t 
 				*ret_index = current_index;
 				return count;
 			}
-			*ret_minirun_rank++;
+			*ret_minirun_rank = *ret_minirun_rank + 1;
 			if (is_runend(qf, current_index++)) break; // if extensions don't match, stop if end of run, skip to next item otherwise
 			current_index += ext_len + count_len;
 		}
@@ -1638,7 +1638,7 @@ int qf_get_count_using_ll_table(const QF *qf, uint64_t key, uint64_t *ret_hash, 
 			if (((*ret_hash >> (qf->metadata->quotient_bits + qf->metadata->bits_per_slot)) & BITMASK(qf->metadata->bits_per_slot * ext_len)) == ext) { // if extensions match, return the count
 				return count;
 			}
-			*ret_minirun_rank++;
+			*ret_minirun_rank = *ret_minirun_rank + 1;
 			if (is_runend(qf, current_index++)) break; // if extensions don't match, stop if end of run, skip to next item otherwise
 			current_index += ext_len + count_len;
 		}
