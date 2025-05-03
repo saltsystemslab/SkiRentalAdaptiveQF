@@ -620,10 +620,10 @@ static inline uint64_t run_end(const QF *qf, uint64_t hash_bucket_index)
 			return hash_bucket_index;
 		} else {
 			do {
-				runend_rank        -= popcntv(get_block(qf, runend_block_index)->runends[0], runend_ignore_bits);
+				runend_rank        -= popcntv(get_block(qf, runend_block_index)->runends[0] & (~get_block(qf, runend_block_index)->extensions[0]), runend_ignore_bits);
 				runend_block_index++;
 				runend_ignore_bits  = 0;
-				runend_block_offset = bitselectv(get_block(qf, runend_block_index)->runends[0], runend_ignore_bits, runend_rank);
+				runend_block_offset = bitselectv(get_block(qf, runend_block_index)->runends[0] & (~get_block(qf, runend_block_index)->extensions[0]), runend_ignore_bits, runend_rank);
 			} while (runend_block_offset == QF_SLOTS_PER_BLOCK);
 		}
 	}
