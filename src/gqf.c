@@ -711,7 +711,7 @@ static inline uint64_t shift_into_b(const uint64_t a, const uint64_t b, const in
 	const uint64_t b_shifted_mask = BITMASK(bend - bstart) << bstart;
 	const uint64_t b_shifted = ((b_shifted_mask & b) << amount) & b_shifted_mask;
 	const uint64_t b_mask = ~b_shifted_mask;
-	return a_component | b_shifted | (b & b_mask);
+	return (a_component & b_shifted_mask) | b_shifted | (b & b_mask);
 }
 
 #if QF_BITS_PER_SLOT == 8 || QF_BITS_PER_SLOT == 16 || QF_BITS_PER_SLOT == 32 || QF_BITS_PER_SLOT == 64
@@ -2349,6 +2349,12 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 	int ext_len, count_len;
 	// figure out how many extensions there currently are
 	if (!get_slot_info(qf, index, &ext, &ext_len, &count, &count_len)) return 0;
+
+	// The counter is being used to track false positive encounters.
+	// Never use more than one slot for counter. 
+	// If count_len is 0, the filter is being used as monotonic adaptive (always adapt). 
+	assert(count_len <= 1); // The counter is being used to track false positive encounters.
+
 	assert((hash & BITMASK(qf->metadata->quotient_bits + qf->metadata->bits_per_slot)) == (get_slot(qf, index) | (hash_bucket_index << qf->metadata->bits_per_slot)));
 	int ext_bits = qf->metadata->bits_per_slot * ext_len;
 	*ret_hash = hash & BITMASK(ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
@@ -2367,23 +2373,35 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 			return QF_NO_SPACE; // maybe should do something about the now extraneous slots? allows for false negative
 		}
 
-		shift_remainders(qf, index + slots_used, empty_slot_index);
+		if (count_len == 0) {
+			shift_remainders(qf, index + slots_used, empty_slot_index);
 
-		set_slot(qf, index + slots_used, hash & BITMASK(qf->metadata->bits_per_slot));
-		*ret_hash |= (hash & BITMASK(qf->metadata->bits_per_slot)) << (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
+			set_slot(qf, index + slots_used, hash & BITMASK(qf->metadata->bits_per_slot));
+			*ret_hash |= (hash & BITMASK(qf->metadata->bits_per_slot)) << (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
 
-		shift_runends(qf, index + slots_used, empty_slot_index - 1, 1);
+			shift_runends(qf, index + slots_used, empty_slot_index - 1, 1);
 
-		uint64_t i;
-		for (i = hash_bucket_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
-			if (get_block(qf, i)->offset < BITMASK(8 * sizeof(qf->blocks[0].offset))) get_block(qf, i)->offset++;
+			uint64_t i;
+			for (i = hash_bucket_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
+				if (get_block(qf, i)->offset < BITMASK(8 * sizeof(qf->blocks[0].offset))) get_block(qf, i)->offset++;
+			}
+
+			METADATA_WORD(qf, extensions, index + slots_used) |= 1ULL << ((index + slots_used) % 64);
+			//modify_metadata(&qf->runtimedata->pc_noccupied_slots, 1);
+			qf->metadata->noccupied_slots++;
+			slots_used++;
+			ext_bits += qf->metadata->bits_per_slot;
+		} else if (count_len == 1) {
+			// Simply overwrite first slot that was used as a counter.
+			set_slot(qf, index + slots_used, hash & BITMASK(qf->metadata->bits_per_slot)); 
+			// Last slot was a counter, so it should have runend set to 1. Flipping it to make it an extension slot.
+			assert(is_counter(qf, index+slots_used));
+			METADATA_WORD(qf, runends, index+slots_used) ^= (1ULL << ((index+slots_used)% QF_SLOTS_PER_BLOCK));
+			assert(is_extension(qf, index+slots_used));
+			*ret_hash |= (hash & BITMASK(qf->metadata->bits_per_slot)) << (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
+			ext_bits += qf->metadata->bits_per_slot;
+			count_len = 0;
 		}
-
-		METADATA_WORD(qf, extensions, index + slots_used) |= 1ULL << ((index + slots_used) % 64);
-		//modify_metadata(&qf->runtimedata->pc_noccupied_slots, 1);
-		qf->metadata->noccupied_slots++;
-		slots_used++;
-		ext_bits += qf->metadata->bits_per_slot;
 	} while (((hash & BITMASK(qf->metadata->bits_per_slot)) == (other_hash & BITMASK(qf->metadata->bits_per_slot))) && (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot < 64));
 
 	return ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot;

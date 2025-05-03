@@ -33,7 +33,7 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t numRounds = params.numRounds;
   std::string output_file = params.output_file;
 
-  std::cout<<"Writing to "<<output_file<<std::endl;
+  std::cout << "Writing to " << output_file << std::endl;
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
@@ -100,8 +100,9 @@ int run_benchmark_with_storage_engine(
     std::string filterType, BenchmarkParams params) {
   int ret = -1;
   if (filterType == "adaptive") {
-    ret = run_benchmark<DbStorageEngine, MonotonicAdaptiveFilter<ReverseMapEngine>>(
-        params);
+    ret = run_benchmark<
+        DbStorageEngine,
+        MonotonicAdaptiveFilter<ReverseMapEngine>>(params);
   }
   if (filterType == "nonAdaptive") {
     ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
@@ -182,6 +183,9 @@ int main(int argc, char **argv) {
     for (uint64_t i = 0; i < numQueries; i++) {
       // Zero out bits in the insert set to force a false positive.
       querySet[i] = (insertSet[i % numInserts]) & minirun_bitmask;
+      if (querySet[i] == insertSet[i % numInserts]) {
+        querySet[i] |= (1ULL << (qbits + rbits + 1));
+      }
     }
   } else {
     abort();
@@ -202,33 +206,34 @@ int main(int argc, char **argv) {
   params.numRounds = numRounds;
   params.output_file = filterType + ".csv";
 
-  int ret = -1; 
+  int ret = -1;
   if (microBench) {
-    ret = run_benchmark_with_storage_engine<DummyDBBackingStore, DummyDBBackingStore>(
-        filterType, params);
-  }
-  else if (storageEngine == "splinterDB" && reverseMapEngine == "wiredTiger") {
+    ret = run_benchmark_with_storage_engine<
+        DummyDBBackingStore,
+        DummyDBBackingStore>(filterType, params);
+  } else if (
+      storageEngine == "splinterDB" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         SplinterDBBackingStore,
         WiredTigerBackingStore>(filterType, params);
-  }
-  else if (storageEngine == "splinterDB" && reverseMapEngine == "splinterDB") {
+  } else if (
+      storageEngine == "splinterDB" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
         SplinterDBBackingStore,
         SplinterDBBackingStore>(filterType, params);
-  }
-  else if (storageEngine == "wiredTiger" && reverseMapEngine == "wiredTiger") {
+  } else if (
+      storageEngine == "wiredTiger" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
         WiredTigerBackingStore>(filterType, params);
-  }
-  else if (storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
+  } else if (
+      storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
         SplinterDBBackingStore>(filterType, params);
   }
   if (ret) {
-    std::cout<<"Test failed"<<std::endl;
+    std::cout << "Test failed" << std::endl;
     return -1;
   }
   return 0;

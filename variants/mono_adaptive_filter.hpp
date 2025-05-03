@@ -41,7 +41,8 @@ public:
       }
       uint64_t fingerprint = result.minirun_id;
       uint64_t value = keys[i];
-      ret = reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
+      ret =
+          reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
       if (ret < 0) {
         return -1;
       }

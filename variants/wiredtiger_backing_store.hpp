@@ -52,7 +52,7 @@ public:
   int insertFingerprint(uint64_t fingerprint, int rank, uint64_t key) {
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     fingerprint = (fingerprint & minirunBitmask)
-                           << (64 - quotient_remainder_bits);
+                  << (64 - quotient_remainder_bits);
     fingerprint = fingerprint + rank;
     cursor->reset(cursor);
     cursor->set_key(cursor, fingerprint);
@@ -64,7 +64,7 @@ public:
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     fingerprint = (fingerprint & minirunBitmask)
-                           << (64 - quotient_remainder_bits);
+                  << (64 - quotient_remainder_bits);
     fingerprint = fingerprint + rank;
     cursor->set_key(cursor, fingerprint);
     if (cursor->search(cursor) == WT_NOTFOUND) {

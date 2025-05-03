@@ -2,8 +2,10 @@
 #define DSKI_ADAPTIVE_FILTER
 
 #include "qf_filter.hpp"
-#include <unordered_map>
 #include <cstddef>
+#include <unordered_map>
+
+#define DEBUG 0
 
 extern "C" {
 #include "include/gqf.h"
@@ -40,14 +42,15 @@ public:
         return -1;
       }
 
-    #if 0
-      std::pair<uint64_t, uint64_t> fingerprint(result.minirun_id, result.minirun_rank);
+#if DEBUG
+      std::pair<uint64_t, uint64_t> fingerprint(
+          result.minirun_id, result.minirun_rank);
       if (fingerprintCount.find(fingerprint) == fingerprintCount.end()) {
         fingerprintCount[fingerprint] = 1;
       } else {
         fingerprintCount[fingerprint]++;
       }
-    #endif
+#endif
 
       ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
@@ -77,23 +80,24 @@ public:
     }
     result->hash = hash;
     result->minirun_rank = minirun_rank;
-    #if 0
+
+#if DEBUG
     if (result->key_present) {
-      std::pair<uint64_t, uint64_t> fingerprint(result->hash, result->minirun_rank);
+      std::pair<uint64_t, uint64_t> fingerprint(
+          result->hash, result->minirun_rank);
       if (fingerprintCount.find(fingerprint) == fingerprintCount.end()) {
-        // printf("fingerprint entry not found, bug in filter %lu %lu: expected:%lu not in map\n", result->hash, result->minirun_rank, minirun_count);
+        // printf("fingerprint entry not found, bug in filter %lu %lu:
+        // expected:%lu not in map\n", result->hash, result->minirun_rank,
+        // minirun_count);
       } else if (fingerprintCount[fingerprint] != minirun_count) {
-        // printf("fingerprint entry not found, bug in filter %lu %lu: expected:%lu in_filter:%lu\n", result->hash, result->minirun_rank, fingerprintCount[fingerprint], result->minirun_count);
+        // printf("fingerprint entry not found, bug in filter %lu %lu:
+        // expected:%lu in_filter:%lu\n", result->hash, result->minirun_rank,
+        // fingerprintCount[fingerprint], result->minirun_count);
         minirun_count = qf_get_count_using_ll_table_with_index(
-             &qf,
-             queryKey,
-             &hash,
-             &minirun_rank,
-             &hash_index,
-             QF_KEY_IS_HASH);
+            &qf, queryKey, &hash, &minirun_rank, &hash_index, QF_KEY_IS_HASH);
       }
     }
-    #endif
+#endif
     return 0;
   }
 
@@ -117,22 +121,34 @@ public:
     } else {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
-      int ret = reverseMap.getFingerprint(
-          fingerprint, filterResult->minirun_rank, &origKey);
-      if (ret) {
-        printf("fingerprint fetch failed\n");
-        return -1;
+
+      int count = 0;
+      // Adapt ALL miniruns NOW.
+      while (filterResult->key_present) {
+        count++;
+        int ret = reverseMap.getFingerprint(
+            fingerprint, filterResult->minirun_rank, &origKey);
+        if (ret) {
+          printf("fingerprint fetch failed\n");
+          return -1;
+        }
+        ret = qf_adapt_using_ll_table(
+            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+        queryFilter(queryKey, filterResult);
       }
-      ret = qf_adapt_using_ll_table(
-          &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-      
-      #if 0
+
+#if DEBUG
+      uint8_t old_minirun_rank = filterResult->minirun_rank;
       queryFilter(queryKey, filterResult);
       if (filterResult->key_present) {
         // Bug -> should not hapen.
+        printf(
+            "Adapting failed %lu %lu\n",
+            filterResult->hash,
+            filterResult->minirun_rank);
         queryFilter(queryKey, filterResult); // FOr debugging.
       }
-      #endif
+#endif
     }
     return 0;
   }
@@ -147,11 +163,9 @@ private:
   size_t fullPoint;
   int breakEvenCount;
 
-#if 0
-  std::map< std::pair<uint64_t, uint64_t>, uint64_t> fingerprintCount;
-#endif 
-
-
+#if DEBUG
+  std::map<std::pair<uint64_t, uint64_t>, uint64_t> fingerprintCount;
+#endif
 };
 
 #endif

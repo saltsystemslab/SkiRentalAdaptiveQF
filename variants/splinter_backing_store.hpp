@@ -38,15 +38,15 @@ public:
     int isUpdate = (rank > 0);
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     uint64_t queryFingerprint = (fingerprint & minirunBitmask)
-                                  << (64 - quotient_remainder_bits);
+                                << (64 - quotient_remainder_bits);
     return db_insert(
-            db,
-            &queryFingerprint,
-            sizeof(queryFingerprint),
-            &key,
-            sizeof(key),
-            isUpdate,
-            0);
+        db,
+        &queryFingerprint,
+        sizeof(queryFingerprint),
+        &key,
+        sizeof(key),
+        isUpdate,
+        0);
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
@@ -61,7 +61,9 @@ public:
     // TODO(chesetti): Check if result at rank exists.
     if (splinterdb_lookup_found(&db_result)) {
       memcpy(
-        value, slice_data(result_val) + rank * MAX_KEY_SIZE, sizeof(uint64_t));
+          value,
+          slice_data(result_val) + rank * MAX_KEY_SIZE,
+          sizeof(uint64_t));
       return 0;
     }
     return -1;
