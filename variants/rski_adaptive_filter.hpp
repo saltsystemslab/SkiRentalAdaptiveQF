@@ -31,6 +31,11 @@ public:
     fullPoint = config.max_load_factor * num_slots;
     reverseMap.init("reverseMap", config.qbits + config.rbits);
     breakEvenCount = config.breakEvenCount;
+    prob_dist = new double[breakEvenCount];
+    for (int i=1; i<=breakEvenCount; i++) {
+      prob_dist[i-1] = calc_rental_prob(i, breakEvenCount);
+      if (i-1) prob_dist[i-1] += prob_dist[i-2];
+    }
     return 0;
   }
 
@@ -98,10 +103,21 @@ public:
     } else {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
-      reverseMap.getFingerprint(
-          fingerprint, filterResult->minirun_rank, &origKey);
-      qf_adapt_using_ll_table(
-          &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+
+      int count = 0;
+      // Adapt ALL miniruns NOW.
+      while (filterResult->key_present) {
+        count++;
+        int ret = reverseMap.getFingerprint(
+            fingerprint, filterResult->minirun_rank, &origKey);
+        if (ret) {
+          printf("fingerprint fetch failed\n");
+          return -1;
+        }
+        ret = qf_adapt_using_ll_table(
+            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+        queryFilter(queryKey, filterResult);
+      }
     }
     return 0;
   }
@@ -111,48 +127,26 @@ public:
   }
 
 private:
-  /*
-  TODO(chesetti): Double check coinflip logic.
-  Hard-coded using below python script
-   b = 15
-   ep = (1+1/b)**b
-   a = ep/(ep-1) - 1.0
-   probs = []
-   for i in range(1, b+1):
-       prob = a/b * (((b+1)/b)**(i-1))
-       probs.append(prob)
-   print(probs)
-
-   Also only works for breakEvenDay=15.
-  */
-  const double prob_distribution[15] = {
-      0.04082769035010176,
-      0.043549536373441874,
-      0.046452838798338,
-      0.049549694718227205,
-      0.05285300769944235,
-      0.056376541546071836,
-      0.06013497764914329,
-      0.06414397615908618,
-      0.06842024123635858,
-      0.07298159065211583,
-      0.07784703002892354,
-      0.08303683203085178,
-      0.08857262083290857,
-      0.09447746222176913,
-      0.10077595970322041};
-
   bool coin_flip(int day) {
-    if (day >= 15)
+    if (day > breakEvenCount)
       return 1;
+    assert(day > 0 && day <= breakEvenCount);
     double flip = dis(gen);
-    return flip <= prob_distribution[day];
+    return flip <= prob_dist[day-1];
+  }
+
+  double calc_rental_prob(int day, int last_day) {
+    assert(day > 0 && day <=last_day);
+    double ep = pow((1 + 1.0/last_day), last_day);
+    double alpha = ep/(ep-1) - 1;
+    return alpha/last_day * pow((1 + 1.0/last_day), day-1);
   }
 
   QF qf;
   ReverseMap reverseMap;
   size_t fullPoint;
   size_t breakEvenCount;
+  double *prob_dist;
 };
 
 #endif
