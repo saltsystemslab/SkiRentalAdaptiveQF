@@ -5,7 +5,7 @@
 
 class WiredTigerBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb) {
     dbName = dbName + "_wiredTiger";
     if (std::filesystem::exists(dbName))
       std::filesystem::remove_all(dbName);
@@ -17,7 +17,7 @@ public:
     sprintf(
         connection_config,
         "create,statistics=(all),direct_io=[data],cache_size=%dMB",
-        buffer_pool_size_mb);
+        cache_size_mb);
 
     printf("%s\n", connection_config);
     printf("%s\n", table_schema);

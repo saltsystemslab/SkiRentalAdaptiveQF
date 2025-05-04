@@ -29,7 +29,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", config.qbits + config.rbits);
+    reverseMap.init("reverseMap", config.qbits + config.rbits, 64);
     breakEvenCount = config.breakEvenCount;
     prob_dist = new double[breakEvenCount];
     for (int i=1; i<=breakEvenCount; i++) {

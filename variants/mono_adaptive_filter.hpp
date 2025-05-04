@@ -23,7 +23,7 @@ public:
       return -1;
     }
     full_point = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", config.qbits + config.rbits);
+    reverseMap.init("reverseMap", config.qbits + config.rbits, 64);
 
     return 0;
   }

@@ -8,7 +8,7 @@ extern "C" {
 
 class DummyDBBackingStore {
 public:
-  int init(char *dbName, int quotient_remainder_bits) {
+  int init(char *dbName, int quotient_remainder_bits, int cache_size_mb) {
     this->quotient_remainder_bits = quotient_remainder_bits;
     return 0;
   }
@@ -18,11 +18,14 @@ public:
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
-    fingerprint = fingerprint >> (64 - quotient_remainder_bits);
-
     uint64_t mask = -1;
+    uint64_t rank_offset = rank;
+    rank_offset = rank_offset << (64 - quotient_remainder_bits);
+
     mask = mask << (64 - quotient_remainder_bits);
-    *value = fingerprint | mask; // Fill the higher order bits with all 1's
+    mask = mask - rank_offset;
+
+    *value = fingerprint | mask; // Fill the higher order bits with 1's
     return 0;
   }
 

@@ -37,7 +37,7 @@ int run_benchmark(BenchmarkParams params) {
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp cumulative_thput cumulative_fp "
+      "round round_thput round_fp round_tp cumulative_thput cumulative_fp "
       "load_factor\n");
 
   int ret = 0;
@@ -50,7 +50,7 @@ int run_benchmark(BenchmarkParams params) {
     abort();
   }
   DbStorageEngine db;
-  db.init("database", qfConfig.qbits + qfConfig.rbits);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, 512);
   for (uint64_t i = 0; i < numInserts; i++) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
@@ -61,6 +61,7 @@ int run_benchmark(BenchmarkParams params) {
   for (uint32_t r = 0; r < numRounds; r++) {
     auto round_start = std::chrono::high_resolution_clock::now();
     uint64_t roundFpCount = 0;
+    uint64_t roundTruePositive = 0;
     for (uint64_t i = 0; i < numQueries; i++) {
       qf.queryFilter(querySet[i], &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
@@ -70,6 +71,8 @@ int run_benchmark(BenchmarkParams params) {
           if (qf.adapt(querySet[i], &qfFilterQueryResult)) {
             return -1;
           }
+        } else {
+          roundTruePositive++;
         }
       }
     }
@@ -83,10 +86,11 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueries) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %f %lu %f\n",
+        "%d %f %lu %lu %f %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
+        roundTruePositive,
         cumulativeThroughput,
         fpCount,
         qf.loadFactor());

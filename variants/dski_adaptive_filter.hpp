@@ -26,7 +26,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits);
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, 64);
     breakEvenCount = config.breakEvenCount;
     return 0;
   }
