@@ -32,9 +32,10 @@ public:
     reverseMap.init("reverseMap", config.qbits + config.rbits, 64);
     breakEvenCount = config.breakEvenCount;
     prob_dist = new double[breakEvenCount];
-    for (int i=1; i<=breakEvenCount; i++) {
-      prob_dist[i-1] = calc_rental_prob(i, breakEvenCount);
-      if (i-1) prob_dist[i-1] += prob_dist[i-2];
+    for (int i = 1; i <= breakEvenCount; i++) {
+      prob_dist[i - 1] = calc_rental_prob(i, breakEvenCount);
+      if (i - 1)
+        prob_dist[i - 1] += prob_dist[i - 2];
     }
     return 0;
   }
@@ -132,14 +133,14 @@ private:
       return 1;
     assert(day > 0 && day <= breakEvenCount);
     double flip = dis(gen);
-    return flip <= prob_dist[day-1];
+    return flip <= prob_dist[day - 1];
   }
 
   double calc_rental_prob(int day, int last_day) {
-    assert(day > 0 && day <=last_day);
-    double ep = pow((1 + 1.0/last_day), last_day);
-    double alpha = ep/(ep-1) - 1;
-    return alpha/last_day * pow((1 + 1.0/last_day), day-1);
+    assert(day > 0 && day <= last_day);
+    double ep = pow((1 + 1.0 / last_day), last_day);
+    double alpha = ep / (ep - 1) - 1;
+    return alpha / last_day * pow((1 + 1.0 / last_day), day - 1);
   }
 
   QF qf;

@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iostream>
 #include <stdio.h>
+#include <queue>
 
 #include "cxxopts.hpp"
 #include "dski_adaptive_filter.hpp"
@@ -20,6 +21,9 @@ struct BenchmarkParams {
   uint64_t numQueries;
   uint64_t numRounds;
   std::string output_file;
+  int is_adversarial;
+  int adversarial_freq;
+  uint64_t max_adversarial_repeat;
 };
 
 template <typename DbStorageEngine, typename QFilter>
@@ -32,12 +36,15 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t numQueries = params.numQueries;
   uint64_t numRounds = params.numRounds;
   std::string output_file = params.output_file;
+  int is_adversarial = params.is_adversarial;
+  int adversarial_freq = params.adversarial_freq;
+  uint64_t max_adversarial_repeat = params.max_adversarial_repeat;
 
   std::cout << "Writing to " << output_file << std::endl;
   FILE *rounds_file = fopen(output_file.c_str(), "w");
   fprintf(
       rounds_file,
-      "round round_thput round_fp round_tp cumulative_thput cumulative_fp "
+      "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
       "load_factor\n");
 
   int ret = 0;
@@ -50,25 +57,63 @@ int run_benchmark(BenchmarkParams params) {
     abort();
   }
   DbStorageEngine db;
-  db.init("database", qfConfig.qbits + qfConfig.rbits, 512);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, 64);
   for (uint64_t i = 0; i < numInserts; i++) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
 
   uint64_t fpCount = 0;
+  uint64_t numQueriesPerRound = numQueries / numRounds;
+
+  uint64_t total_adversarial_queries_count = 0;
+	uint64_t *adv_queries = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
+  uint64_t cur_adv_query = 0;
+  uint64_t adv_query_size = 0;
+  // std::queue<uint64_t> adv_queries;
+  // std::unordered_map<uint64_t, uint64_t> adv_queries_count;
+
+  // Warmup Queries
   QFilterQueryResult qfFilterQueryResult;
+  for (uint32_t r = 0; r < numRounds/4; r++) {
+    for (uint64_t i = 0; i < numQueriesPerRound; i++) {
+      uint64_t queryIdx = r * numQueriesPerRound + i;
+      uint64_t queryKey = querySet[queryIdx];
+      qf.queryFilter(queryKey, &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present) {
+        if (!db.searchKV(queryKey)) {
+          fpCount++;
+        } 
+      }
+    }
+  }
+
+  fpCount = 0;
   auto bench_start = std::chrono::high_resolution_clock::now();
   for (uint32_t r = 0; r < numRounds; r++) {
     auto round_start = std::chrono::high_resolution_clock::now();
     uint64_t roundFpCount = 0;
     uint64_t roundTruePositive = 0;
-    for (uint64_t i = 0; i < numQueries; i++) {
-      qf.queryFilter(querySet[i], &qfFilterQueryResult);
+    for (uint64_t i = 0; i < numQueriesPerRound; i++) {
+      uint64_t queryIdx = r * numQueriesPerRound + i;
+      uint64_t queryKey = querySet[queryIdx];
+
+      if (is_adversarial && queryIdx % adversarial_freq == 0 && adv_query_size > 0) {
+        total_adversarial_queries_count++;
+        if (cur_adv_query == adv_query_size)cur_adv_query=0;
+        queryKey = adv_queries[cur_adv_query];
+        cur_adv_query++;
+      }
+
+      qf.queryFilter(queryKey, &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
-        if (!db.searchKV(querySet[i])) {
+        if (is_adversarial && queryIdx % adversarial_freq != 0) {
+          adv_queries[adv_query_size] = queryKey;
+          adv_query_size++;
+        }
+        if (!db.searchKV(queryKey)) {
           fpCount++;
           roundFpCount++;
-          if (qf.adapt(querySet[i], &qfFilterQueryResult)) {
+          if (qf.adapt(queryKey, &qfFilterQueryResult)) {
             return -1;
           }
         } else {
@@ -79,20 +124,32 @@ int run_benchmark(BenchmarkParams params) {
     auto round_end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::micro> round_duration =
         round_end - round_start;
-    double roundThroughput = ((double)numQueries) / round_duration.count();
+    double roundThroughput = ((double)numQueriesPerRound) / round_duration.count();
     std::chrono::duration<double, std::micro> overall_duration =
         round_end - bench_start;
     double cumulativeThroughput =
-        ((double)(r + 1) * (double)numQueries) / overall_duration.count();
+        ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
         roundTruePositive,
         cumulativeThroughput,
         fpCount,
+        total_adversarial_queries_count,
+        qf.loadFactor());
+    fprintf(
+        stdout,
+        "%d %f %lu %lu %f %lu %lu %f\n",
+        r,
+        roundThroughput,
+        roundFpCount,
+        roundTruePositive,
+        cumulativeThroughput,
+        fpCount,
+        total_adversarial_queries_count,
         qf.loadFactor());
   }
   db.close();
@@ -126,6 +183,10 @@ int main(int argc, char **argv) {
   cxxopts::Options options("Bench adaptive filter variants");
 
   options.add_options()(
+      "seed",
+      "random seed",
+      cxxopts::value<int>()->default_value("0"))(
+
       "q,quotient",
       "Quotient bits to use in filter",
       cxxopts::value<int>()->default_value("22"))(
@@ -133,6 +194,10 @@ int main(int argc, char **argv) {
       "r,remainder",
       "Remainder bits to use in filter",
       cxxopts::value<int>()->default_value("8"))(
+
+      "k,breakEven",
+      "Break Even Ratio",
+      cxxopts::value<int>()->default_value("5"))(
 
       "queryWorkload",
       "uniform, false-positive, zipfian, adversarial",
@@ -151,7 +216,7 @@ int main(int argc, char **argv) {
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
       "numQueries",
-      "Number of queries ",
+      "Number of total queries ",
       cxxopts::value<uint64_t>()->default_value("20000"))(
 
       "numRounds",
@@ -160,13 +225,27 @@ int main(int argc, char **argv) {
 
       "microBench",
       "Only query filter. Only valid for false-positive",
-      cxxopts::value<bool>()->default_value("false"));
+      cxxopts::value<bool>()->default_value("false"))(
+
+      "advFreq",
+      "adversarialFreq",
+      cxxopts::value<int>()->default_value("5"))(
+
+      "maxAdvRepeat",
+      "maximum times a fp should be repeated as a adversarial query. 0 means no limit to repetition",
+      cxxopts::value<int>()->default_value("0"));
+
+
 
   auto result = options.parse(argc, argv);
+  int seed = result["seed"].as<int>();
   int qbits = result["q"].as<int>();
   int rbits = result["r"].as<int>();
   uint64_t numQueries = result["numQueries"].as<uint64_t>();
   int numRounds = result["numRounds"].as<int>();
+  int advFreq = result["advFreq"].as<int>();
+  int maxAdvRepeat = result["maxAdvRepeat"].as<int>();
+  int breakEven = result["breakEven"].as<int>();
   std::string queryWorkload = result["queryWorkload"].as<std::string>();
   std::string filterType = result["filter"].as<std::string>();
   std::string storageEngine = result["storageEngine"].as<std::string>();
@@ -175,31 +254,18 @@ int main(int argc, char **argv) {
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
 
   uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
-  RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
   uint64_t *querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
-  RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
 
   std::cout << "Testing filter: " << filterType
             << " with workload: " << queryWorkload << std::endl;
 
   uint64_t minirun_bitmask = (1ULL << qbits + rbits) - 1;
-  if (queryWorkload == "false-positive") {
-    for (uint64_t i = 0; i < numQueries; i++) {
-      // Zero out bits in the insert set to force a false positive.
-      querySet[i] = (insertSet[i % numInserts]) & minirun_bitmask;
-      if (querySet[i] == insertSet[i % numInserts]) {
-        querySet[i] |= (1ULL << (qbits + rbits + 1));
-      }
-    }
-  } else {
-    abort();
-  }
-
   QFilterConfig qfConfig;
   qfConfig.qbits = qbits;
   qfConfig.rbits = rbits;
   qfConfig.max_load_factor = 0.95;
-  qfConfig.breakEvenCount = 15;
+  qfConfig.breakEvenCount = breakEven;
+
 
   BenchmarkParams params;
   params.qfConfig = qfConfig;
@@ -209,6 +275,39 @@ int main(int argc, char **argv) {
   params.numQueries = numQueries;
   params.numRounds = numRounds;
   params.output_file = filterType + ".csv";
+  params.is_adversarial = 0;
+  params.adversarial_freq = 100 / advFreq;
+  params.max_adversarial_repeat = maxAdvRepeat;
+
+  if (queryWorkload == "false-positive") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+    uint64_t numQueriesPerRound = numQueries / numRounds;
+    for (uint64_t r = 0; r < numRounds; r++) {
+      for (uint64_t i = 0; i < numQueriesPerRound; i++) {
+        // Zero out bits in the insert set to force a false positive.
+        uint64_t queryIdx = r * numQueriesPerRound + i;
+        querySet[queryIdx] =
+            (insertSet[i % numInserts]) & minirun_bitmask;
+        if (querySet[queryIdx] == insertSet[i % numInserts]) {
+          querySet[queryIdx] |= (1ULL << (qbits + rbits + 1));
+        }
+      }
+    }
+  } else if (queryWorkload == "uniform") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+  } else if (queryWorkload == "zipfian") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+    for (uint64_t i=0; i < numQueries; i++) {
+      querySet[i] = rand_zipfian(1.5f, 1ull << 30, querySet[i]);
+    }
+  } else if (queryWorkload == "adversarial") {
+    params.is_adversarial = 1;
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+  }
 
   int ret = -1;
   if (microBench) {
