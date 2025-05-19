@@ -19,8 +19,22 @@ def test_config():
     break_even = 24
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even):
-    os.system('make clean && make bench_variants')
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, _seed):
+    os.system('make clean && make bench_variants workload_gen')
+    argDict = {
+        '-q': quotient_bits,
+        '-r': remainder_bits,
+        '--numQueries': num_queries,
+        '--numRounds': num_rounds,
+        '--queryWorkload': query_workload,
+        '--seed': _seed,
+    }
+    cmd = "./workload_gen" 
+    for arg_name in argDict:
+        cmd = cmd + (' %s %s' % (arg_name, argDict[arg_name]))
+    print(cmd)
+    os.system(cmd)
+
     argDict = {
         '-q': quotient_bits,
         '-r': remainder_bits,
@@ -46,6 +60,8 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
 @ex.automain
 def run_experiment():
     run_filter_bench()
+    ex.add_artifact('insertSet')
+    ex.add_artifact('querySet')
     for filter in filters:
         ex.add_artifact('%s.csv' % filter)
     pass

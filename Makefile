@@ -1,5 +1,5 @@
 CTARGETS=unit_test test_throughput 
-CXXTARGETS=bench_variants
+CXXTARGETS=bench_variants workload_gen
 
 ifndef D
 	DEBUG=
@@ -63,6 +63,10 @@ bench_variants:			$(OBJDIR)/bench_variants.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 
+workload_gen:			$(OBJDIR)/workload_gen.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
+										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
+										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+
 
 # dependencies between .o files and .cc (or .c) files
 
@@ -74,6 +78,7 @@ $(OBJDIR)/ll_table.o:					$(LOC_SRC)/ll_table.c $(LOC_INCLUDE)/ll_table.h
 $(OBJDIR)/splinter_util.o:				$(LOC_SRC)/splinter_util.c $(LOC_INCLUDE)/splinter_util.h# $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o
 $(OBJDIR)/test_driver.o:				$(LOC_SRC)/test_driver.c $(LOC_INCLUDE)/test_driver.h# $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o $(OBJDIR)/splinter_util.o
 $(OBJDIR)/bench_variants.o:				$(LOC_TEST)/bench_variants.cc
+$(OBJDIR)/workload_gen.o:				$(LOC_TEST)/workload_gen.cc $(LOC_SRC)/rand_util.c
 
 #
 # generic build rules
@@ -111,3 +116,5 @@ clean:
 	rm -rf out
 	rm -rf output.txt
 	rm -rf database
+	rm -rf *_wiredTiger
+	rm -rf querySet insertSet

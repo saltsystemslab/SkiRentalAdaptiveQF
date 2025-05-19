@@ -1,0 +1,124 @@
+#include <chrono>
+#include <iostream>
+#include <stdio.h>
+#include <queue>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <openssl/rand.h>
+
+#include "cxxopts.hpp"
+
+extern "C" {
+#include "include/rand_util.h"
+#include "include/hashutil.h"
+}
+
+int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *querySet, uint64_t numQueries) {
+  {
+    int fd = open("insertSet", O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      perror("Failed to write insertSet");
+      return -1;
+    }
+    ssize_t bytesToWrite = (1 + numInserts) * sizeof(uint64_t) ;
+    ssize_t offset = pwrite(fd, &numInserts, sizeof(uint64_t), 0);
+    char *buf = (char *)insertSet;
+    while (offset < bytesToWrite) {
+      ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
+      offset += bytesWritten; 
+    }
+    close(fd);
+  }
+
+  {
+    int fd = open("querySet", O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      perror("Failed to write querySet");
+      return -1;
+    }
+    ssize_t bytesToWrite = (1 + numQueries) * sizeof(uint64_t) ;
+    ssize_t offset = pwrite(fd, &numQueries, sizeof(uint64_t), 0);
+    char *buf = (char *)querySet;
+    while (offset < bytesToWrite) {
+      ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
+      offset += bytesWritten; 
+    }
+    close(fd);
+  }
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  cxxopts::Options options("Bench adaptive filter variants");
+
+  options.add_options()(
+      "seed",
+      "RandSeed",
+      cxxopts::value<uint64_t>()->default_value("0"))(
+
+      "q,quotient",
+      "Quotient bits to use in filter",
+      cxxopts::value<int>()->default_value("22"))(
+
+      "r,remainder",
+      "Remainder bits to use in filter",
+      cxxopts::value<int>()->default_value("8"))(
+
+      "numRounds",
+      "Number of rounds",
+      cxxopts::value<int>()->default_value("100"))(
+
+
+      "queryWorkload",
+      "uniform, false-positive, zipfian",
+      cxxopts::value<std::string>()->default_value("uniform"))(
+
+      "numQueries",
+      "Number of total queries ",
+      cxxopts::value<uint64_t>()->default_value("20000"));
+
+
+
+  auto result = options.parse(argc, argv);
+  int qbits = result["q"].as<int>();
+  int rbits = result["r"].as<int>();
+  int numRounds = result["numRounds"].as<int>();
+  uint64_t randSeed = result["seed"].as<uint64_t>();
+  uint64_t numQueries = result["numQueries"].as<uint64_t>();
+  std::string queryWorkload = result["queryWorkload"].as<std::string>();
+  size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
+
+  uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
+  uint64_t *querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
+  uint64_t minirun_bitmask = (1ULL << (qbits + rbits)) - 1;
+
+
+  if (queryWorkload == "false-positive") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+    uint64_t numQueriesPerRound = numQueries / numRounds;
+    for (int r = 0; r < numRounds; r++) {
+      for (uint64_t i = 0; i < numQueriesPerRound; i++) {
+        // Create a random key having a fingerprint from the insert set.
+        uint64_t queryIdx = r * numQueriesPerRound + i;
+        querySet[queryIdx] = querySet[queryIdx] << (qbits + rbits);
+        querySet[queryIdx] = querySet[queryIdx] | ((insertSet[i % numInserts]) & minirun_bitmask);
+      }
+    }
+  } else if (queryWorkload == "uniform") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+  } else if (queryWorkload == "zipfian") {
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+    for (uint64_t i=0; i < numQueries; i++) {
+      querySet[i] = rand_zipfian(1.5f, 1ull << 30, querySet[i]);
+      querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
+    }
+  } 
+
+  saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
+
+  return 0;
+}

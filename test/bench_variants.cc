@@ -252,9 +252,9 @@ int main(int argc, char **argv) {
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
+  uint64_t *insertSet; 
+  uint64_t *querySet;
 
-  uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
-  uint64_t *querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
 
   std::cout << "Testing filter: " << filterType
             << " with workload: " << queryWorkload << std::endl;
@@ -267,6 +267,47 @@ int main(int argc, char **argv) {
   qfConfig.breakEvenCount = breakEven;
 
 
+
+  {
+    int fd = open("insertSet", O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      perror("Failed to open insert set file");
+    }
+    uint64_t numKeys;
+    pread(fd, &numKeys, sizeof(uint64_t), 0);
+    fprintf(stdout, "numKeys in insertSet %lu\n", numKeys);
+    numInserts = numKeys;
+    insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
+    char *buf = (char *)insertSet;
+    off_t offset = 0;
+    while (offset < numKeys * sizeof(uint64_t)) {
+      ssize_t bytes_read = pread(fd, insertSet + offset, numKeys * sizeof(uint64_t), offset + sizeof(uint64_t));
+      offset += bytes_read;
+      fprintf(stdout, "%lu\n", offset);
+    }
+    close(fd);
+  }
+  {
+    int fd = open("querySet", O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      perror("Failed to open query set file");
+    }
+    uint64_t numKeys;
+    pread(fd, &numKeys, sizeof(uint64_t), 0);
+    fprintf(stdout, "numKeys in querySet %lu\n", numKeys);
+    numQueries = numKeys;
+    querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
+
+    char *buf = (char *)querySet;
+    off_t offset = 0;
+    while (offset < numKeys * sizeof(uint64_t)) {
+      ssize_t bytes_read = pread(fd, buf+ offset, numKeys * sizeof(uint64_t), offset + sizeof(uint64_t));
+      offset += bytes_read;
+      fprintf(stdout, "%lu\n", offset);
+    }
+    close(fd);
+  }
+
   BenchmarkParams params;
   params.qfConfig = qfConfig;
   params.insertSet = insertSet;
@@ -278,35 +319,9 @@ int main(int argc, char **argv) {
   params.is_adversarial = 0;
   params.adversarial_freq = 100 / advFreq;
   params.max_adversarial_repeat = maxAdvRepeat;
-
-  if (queryWorkload == "false-positive") {
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
-    uint64_t numQueriesPerRound = numQueries / numRounds;
-    for (uint64_t r = 0; r < numRounds; r++) {
-      for (uint64_t i = 0; i < numQueriesPerRound; i++) {
-        // Zero out bits in the insert set to force a false positive.
-        uint64_t queryIdx = r * numQueriesPerRound + i;
-        querySet[queryIdx] = querySet[queryIdx] << qbits + rbits;
-        querySet[queryIdx] = querySet[queryIdx] | (insertSet[i % numInserts]) & minirun_bitmask;
-        if (querySet[queryIdx] == insertSet[i % numInserts]) {
-          querySet[queryIdx] |= (1ULL << (qbits + rbits + 1));
-        }
-      }
-    }
-  } else if (queryWorkload == "uniform") {
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
-  } else if (queryWorkload == "zipfian") {
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
-    for (uint64_t i=0; i < numQueries; i++) {
-      querySet[i] = rand_zipfian(1.5f, 1ull << 30, querySet[i]);
-    }
-  } else if (queryWorkload == "adversarial") {
+    
+  if (queryWorkload == "adversarial") {
     params.is_adversarial = 1;
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
   }
 
   int ret = -1;
