@@ -287,8 +287,8 @@ int main(int argc, char **argv) {
       for (uint64_t i = 0; i < numQueriesPerRound; i++) {
         // Zero out bits in the insert set to force a false positive.
         uint64_t queryIdx = r * numQueriesPerRound + i;
-        querySet[queryIdx] =
-            (insertSet[i % numInserts]) & minirun_bitmask;
+        querySet[queryIdx] = querySet[queryIdx] << qbits + rbits;
+        querySet[queryIdx] = querySet[queryIdx] | (insertSet[i % numInserts]) & minirun_bitmask;
         if (querySet[queryIdx] == insertSet[i % numInserts]) {
           querySet[queryIdx] |= (1ULL << (qbits + rbits + 1));
         }
