@@ -11,7 +11,8 @@ extern "C" {
 
 template <typename ReverseMap> class MonotonicAdaptiveFilter {
 public:
-  int construct(QFilterConfig config) {
+  int construct(BenchmarkParams params) {
+    QFilterConfig config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -23,7 +24,7 @@ public:
       return -1;
     }
     full_point = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", config.qbits + config.rbits, 64);
+    reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB, params.shouldCollectDbStats);
 
     return 0;
   }
@@ -79,6 +80,11 @@ public:
 
   double loadFactor() {
     return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
+
+  int close() {
+    reverseMap.close();
+    return 0;
   }
 
 private:

@@ -5,7 +5,7 @@
 
 class WiredTigerBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats) {
     dbName = dbName + "_wiredTiger";
     if (std::filesystem::exists(dbName))
       std::filesystem::remove_all(dbName);
@@ -14,13 +14,20 @@ public:
     char table_schema[max_schema_len];
     char connection_config[max_conn_config_len];
     sprintf(table_schema, "key_format=Q,value_format=Q");
-    sprintf(
+    if (collectStats) {
+      sprintf(
         connection_config,
-        "create,statistics=(all),direct_io=[data],cache_size=%dMB",
+        "create,statistics=(all),direct_io=[data],cache_size=%dMB,statistics_log=(wait=100000,json=true,on_close=true)",
         cache_size_mb);
+    } else {
+      sprintf(
+        connection_config,
+        "create,direct_io=[data],cache_size=%dMB",
+        cache_size_mb);
+    }
 
-    printf("%s\n", connection_config);
-    printf("%s\n", table_schema);
+    printf("ConnectionConfig: %s\n", connection_config);
+    printf("TableSchema: %s\n", table_schema);
     error_check(
         wiredtiger_open(dbName.c_str(), NULL, connection_config, &conn));
     error_check(conn->open_session(conn, NULL, NULL, &session));

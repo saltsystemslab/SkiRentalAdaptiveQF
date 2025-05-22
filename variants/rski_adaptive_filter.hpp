@@ -17,7 +17,8 @@ static std::uniform_real_distribution<> dis{0.0, 1.0};
 
 template <typename ReverseMap> class RSkiAdaptiveFilter {
 public:
-  int construct(QFilterConfig config) {
+  int construct(BenchmarkParams params) {
+    QFilterConfig config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -29,7 +30,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", config.qbits + config.rbits, 64);
+    reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB,params.shouldCollectDbStats);
     breakEvenCount = config.breakEvenCount;
     prob_dist = new double[breakEvenCount];
     for (int i = 1; i <= breakEvenCount; i++) {
@@ -125,6 +126,11 @@ public:
 
   double loadFactor() {
     return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
+
+  int close() {
+    reverseMap.close();
+    return 0;
   }
 
 private:

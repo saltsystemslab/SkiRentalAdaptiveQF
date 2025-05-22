@@ -13,7 +13,8 @@ extern "C" {
 
 class NonAdaptiveFilter {
 public:
-  int construct(QFilterConfig config) {
+  int construct(BenchmarkParams params) {
+    QFilterConfig config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -61,6 +62,10 @@ public:
 
   double loadFactor() {
     return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
+
+  int close() {
+    return 0;
   }
 
 private:

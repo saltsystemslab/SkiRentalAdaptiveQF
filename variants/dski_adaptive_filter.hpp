@@ -14,7 +14,8 @@ extern "C" {
 
 template <typename ReverseMap> class DSkiAdaptiveFilter {
 public:
-  int construct(QFilterConfig config) {
+  int construct(BenchmarkParams params) {
+    QFilterConfig config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -26,7 +27,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, 64);
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, params.reverseMapCacheSizeMB, params.shouldCollectDbStats);
     breakEvenCount = config.breakEvenCount;
     return 0;
   }
@@ -155,6 +156,11 @@ public:
 
   double loadFactor() {
     return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
+  }
+
+  int close() {
+    reverseMap.close();
+    return 0;
   }
 
 private:

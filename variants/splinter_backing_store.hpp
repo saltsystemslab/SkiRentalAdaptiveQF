@@ -8,7 +8,7 @@ extern "C" {
 
 class SplinterDBBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats) {
     dbName = dbName + "_splinterDb";
     data_cfg = qf_data_config_init();
     splinterdb_cfg = qf_splinterdb_config_init(dbName.c_str(), &data_cfg);
@@ -19,6 +19,10 @@ public:
     }
     splinterdb_lookup_result_init(db, &db_result, 0, NULL);
     this->quotient_remainder_bits = quotient_remainder_bits;
+    if (collectStats) {
+      fprintf(stderr, "SplinterDB does not support collecting stats\n");
+      abort();
+    }
     return 0;
   }
 

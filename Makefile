@@ -117,4 +117,3 @@ clean:
 	rm -rf output.txt
 	rm -rf database
 	rm -rf *_wiredTiger
-	rm -rf querySet insertSet

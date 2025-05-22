@@ -49,6 +49,40 @@ int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *query
   return 0;
 }
 
+int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
+  uint64_t minQuery = -1;
+  uint64_t maxQuery = 0;
+  std::map<uint64_t, uint64_t> freqMap;
+  for (uint64_t i=0; i <numQueries; i++) {
+    freqMap[querySet[i]]++;
+    minQuery = std::min(minQuery, querySet[i]);
+    maxQuery = std::max(maxQuery, querySet[i]);
+  }
+  std::vector<std::pair<uint64_t, uint64_t>> distMap;
+  auto it = freqMap.begin();
+  while (it != freqMap.end()) {
+    distMap.push_back(std::pair<uint64_t, uint64_t>(it->second, it->first));
+    it++;
+  }
+  sort(distMap.begin(), distMap.end());
+  reverse(distMap.begin(), distMap.end());
+  {
+    FILE *fd = fopen("queryStats", "w");
+    fprintf(fd, "min: %lu max: %lu\n", minQuery, maxQuery);
+    fprintf(fd, "uniqueQueries: %lu\n", distMap.size());
+    fprintf(fd, "Top 10 most frequent queries\n");
+    for (uint64_t i=0; i < 10 && i < distMap.size(); i++) {
+      fprintf(fd, "num: %lu freq: %lu\n", distMap[i].second, distMap[i].first);
+    }
+    fprintf(fd, "Top 10 least frequent queries\n");
+    for (uint64_t i=distMap.size()-1; i>=0  && i>distMap.size()-10; i--) {
+      fprintf(fd, "num: %lu freq: %lu\n", distMap[i].second, distMap[i].first);
+    }
+    fclose(fd);
+  }
+  return 0;
+}
+
 int main(int argc, char **argv) {
   cxxopts::Options options("Bench adaptive filter variants");
 
@@ -119,6 +153,7 @@ int main(int argc, char **argv) {
   } 
 
   saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
+  saveWorkloadStatsToFile(querySet, numQueries);
 
   return 0;
 }

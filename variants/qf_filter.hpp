@@ -16,4 +16,19 @@ struct QFilterQueryResult {
   uint64_t hash_index;
 };
 
+struct BenchmarkParams {
+  QFilterConfig qfConfig;
+  uint64_t *insertSet;
+  uint64_t numInserts;
+  uint64_t *querySet;
+  uint64_t numQueries;
+  uint64_t numRounds;
+  std::string output_file;
+  int is_adversarial;
+  int adversarial_freq;
+  bool shouldCollectDbStats;
+  uint64_t storageCacheSizeMB;
+  uint64_t reverseMapCacheSizeMB;
+};
+
 #endif

@@ -13,18 +13,6 @@
 #include "splinter_backing_store.hpp"
 #include "wiredtiger_backing_store.hpp"
 
-struct BenchmarkParams {
-  QFilterConfig qfConfig;
-  uint64_t *insertSet;
-  uint64_t numInserts;
-  uint64_t *querySet;
-  uint64_t numQueries;
-  uint64_t numRounds;
-  std::string output_file;
-  int is_adversarial;
-  int adversarial_freq;
-  uint64_t max_adversarial_repeat;
-};
 
 template <typename DbStorageEngine, typename QFilter>
 int run_benchmark(BenchmarkParams params) {
@@ -38,7 +26,6 @@ int run_benchmark(BenchmarkParams params) {
   std::string output_file = params.output_file;
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
-  uint64_t max_adversarial_repeat = params.max_adversarial_repeat;
 
   std::cout << "Writing to " << output_file << std::endl;
   FILE *rounds_file = fopen(output_file.c_str(), "w");
@@ -48,7 +35,7 @@ int run_benchmark(BenchmarkParams params) {
       "load_factor\n");
 
   int ret = 0;
-  ret = qf.construct(qfConfig);
+  ret = qf.construct(params);
   if (ret < 0) {
     abort();
   }
@@ -57,7 +44,7 @@ int run_benchmark(BenchmarkParams params) {
     abort();
   }
   DbStorageEngine db;
-  db.init("database", qfConfig.qbits + qfConfig.rbits, 64);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats);
   for (uint64_t i = 0; i < numInserts; i++) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
@@ -153,6 +140,7 @@ int run_benchmark(BenchmarkParams params) {
         qf.loadFactor());
   }
   db.close();
+  qf.close();
   return 0;
 }
 
@@ -215,6 +203,14 @@ int main(int argc, char **argv) {
       "splinterDB, wiredTiger",
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
+      "storageCacheSizeMB",
+      "Size of database cache size in MB",
+      cxxopts::value<uint64_t>()->default_value("64"))(
+
+      "reverseMapCacheSizeMB",
+      "Size of reverse map cache size in MB",
+      cxxopts::value<uint64_t>()->default_value("64"))(
+
       "numQueries",
       "Number of total queries ",
       cxxopts::value<uint64_t>()->default_value("20000"))(
@@ -227,14 +223,13 @@ int main(int argc, char **argv) {
       "Only query filter. Only valid for false-positive",
       cxxopts::value<bool>()->default_value("false"))(
 
+      "dbStats",
+      "Collect DB Stats (WiredTiger)",
+      cxxopts::value<bool>()->default_value("false"))(
+
       "advFreq",
       "adversarialFreq",
-      cxxopts::value<int>()->default_value("5"))(
-
-      "maxAdvRepeat",
-      "maximum times a fp should be repeated as a adversarial query. 0 means no limit to repetition",
-      cxxopts::value<int>()->default_value("0"));
-
+      cxxopts::value<int>()->default_value("5"));
 
 
   auto result = options.parse(argc, argv);
@@ -242,15 +237,17 @@ int main(int argc, char **argv) {
   int qbits = result["q"].as<int>();
   int rbits = result["r"].as<int>();
   uint64_t numQueries = result["numQueries"].as<uint64_t>();
+  uint64_t storageCacheSizeMB = result["storageCacheSizeMB"].as<uint64_t>();
+  uint64_t reverseMapCacheSizeMB = result["reverseMapCacheSizeMB"].as<uint64_t>();
   int numRounds = result["numRounds"].as<int>();
   int advFreq = result["advFreq"].as<int>();
-  int maxAdvRepeat = result["maxAdvRepeat"].as<int>();
   int breakEven = result["breakEven"].as<int>();
   std::string queryWorkload = result["queryWorkload"].as<std::string>();
   std::string filterType = result["filter"].as<std::string>();
   std::string storageEngine = result["storageEngine"].as<std::string>();
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
+  bool shouldCollectDbStats = result["dbStats"].as<bool>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
   uint64_t *querySet;
@@ -318,7 +315,9 @@ int main(int argc, char **argv) {
   params.output_file = filterType + ".csv";
   params.is_adversarial = 0;
   params.adversarial_freq = 100 / advFreq;
-  params.max_adversarial_repeat = maxAdvRepeat;
+  params.shouldCollectDbStats = shouldCollectDbStats;
+  params.storageCacheSizeMB = storageCacheSizeMB;
+  params.reverseMapCacheSizeMB = reverseMapCacheSizeMB;
     
   if (queryWorkload == "adversarial") {
     params.is_adversarial = 1;
