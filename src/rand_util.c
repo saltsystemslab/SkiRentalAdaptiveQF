@@ -16,11 +16,13 @@ double rand_normal(double mean, double sd) {
 }
 
 double rand_zipfian(double s, double max, uint64_t source) {
+  int count = 10000;
 	double p = (double)source / (-1ULL);
 	
 	double pD = p * (12 * (pow(max, -s + 1) - 1) / (1 - s) + 6 + 6 * pow(max, -s) + s - s * pow(max, -s + 1));
 	double x = max / 2;
-	while (1) {
+	while (count > 0) {
+    count--;
 		double m = pow(x, -s - 2);
 		double mx = m * x;
 		double mxx = mx * x;

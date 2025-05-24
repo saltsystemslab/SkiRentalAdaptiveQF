@@ -99,6 +99,10 @@ int main(int argc, char **argv) {
       "Remainder bits to use in filter",
       cxxopts::value<int>()->default_value("8"))(
 
+      "hashAgainForZipfian",
+      "hashAgainForZipfian",
+      cxxopts::value<bool>()->default_value("false"))(
+
       "numRounds",
       "Number of rounds",
       cxxopts::value<int>()->default_value("100"))(
@@ -122,6 +126,8 @@ int main(int argc, char **argv) {
   uint64_t numQueries = result["numQueries"].as<uint64_t>();
   std::string queryWorkload = result["queryWorkload"].as<std::string>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
+  bool hashAgainForZipfian = result["hashAgainForZipfian"].as<bool>();
+  std::cout<<"HashAgainForZipfian: "<<hashAgainForZipfian<<std::endl;
 
   uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
   uint64_t *querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
@@ -147,8 +153,12 @@ int main(int argc, char **argv) {
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
     for (uint64_t i=0; i < numQueries; i++) {
-      querySet[i] = rand_zipfian(1.5f, 1ull << 30, querySet[i]);
-      querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
+      querySet[i] = rand_zipfian(1.5f, 1ull << 63, querySet[i]);
+      if (hashAgainForZipfian) {
+        querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
+      } else {
+        
+      }
     }
   } 
 

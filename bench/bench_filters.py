@@ -18,9 +18,10 @@ def test_config():
     max_adv_repeat = 0
     break_even = 24
     collect_db_stats=False
+    hash_again_for_zipfian=False
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, _seed):
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, _seed):
     os.system('make clean && make bench_variants workload_gen')
     argDict = {
         '-q': quotient_bits,
@@ -33,6 +34,9 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
     cmd = "./workload_gen"
     for arg_name in argDict:
         cmd = cmd + (' %s %s' % (arg_name, argDict[arg_name]))
+    if hash_again_for_zipfian:
+        cmd = cmd + '--hashAgainForZipfian'
+
     print(cmd)
     os.system(cmd)
     ex.add_artifact('queryStats')
@@ -47,7 +51,6 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         '--reverseMapEngine': reverse_map_engine,
         '--advFreq': adv_freq,
         '--breakEven': break_even,
-
     }
     for filter in filters:
         cmd = "./bench_variants --filter %s " % filter
