@@ -15,7 +15,8 @@ extern "C" {
 template <typename ReverseMap> class DSkiAdaptiveFilter {
 public:
   int construct(BenchmarkParams params) {
-    QFilterConfig config = params.qfConfig;
+    benchmarkParams = params;
+    config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -27,7 +28,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, params.reverseMapCacheSizeMB, params.shouldCollectDbStats);
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, params.reverseMapCacheSizeMB, false, true);
     breakEvenCount = config.breakEvenCount;
     return 0;
   }
@@ -59,6 +60,8 @@ public:
         return -1;
       }
     }
+    reverseMap.close();
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, benchmarkParams.reverseMapCacheSizeMB, benchmarkParams.shouldCollectDbStats, false);
     return 0;
   }
 
@@ -168,6 +171,8 @@ private:
   ReverseMap reverseMap;
   size_t fullPoint;
   int breakEvenCount;
+  BenchmarkParams benchmarkParams;
+  QFilterConfig config;
 
 #if DEBUG
   std::map<std::pair<uint64_t, uint64_t>, uint64_t> fingerprintCount;

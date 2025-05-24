@@ -18,7 +18,8 @@ static std::uniform_real_distribution<> dis{0.0, 1.0};
 template <typename ReverseMap> class RSkiAdaptiveFilter {
 public:
   int construct(BenchmarkParams params) {
-    QFilterConfig config = params.qfConfig;
+    benchParams = params;
+    config = params.qfConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -30,7 +31,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB,params.shouldCollectDbStats);
+    reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB, false, true);
     breakEvenCount = config.breakEvenCount;
     prob_dist = new double[breakEvenCount];
     for (int i = 1; i <= breakEvenCount; i++) {
@@ -60,6 +61,8 @@ public:
         return -1;
       }
     }
+    reverseMap.close();
+    reverseMap.init("reverseMap", config.qbits + config.rbits, benchParams.reverseMapCacheSizeMB, benchParams.shouldCollectDbStats, false);
     return 0;
   }
 
@@ -154,6 +157,9 @@ private:
   size_t fullPoint;
   size_t breakEvenCount;
   double *prob_dist;
+  QFilterConfig config;
+  BenchmarkParams benchParams;
+
 };
 
 #endif

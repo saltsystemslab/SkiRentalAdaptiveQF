@@ -5,9 +5,9 @@
 
 class WiredTigerBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
     dbName = dbName + "_wiredTiger";
-    if (std::filesystem::exists(dbName))
+    if (std::filesystem::exists(dbName) && clearOld)
       std::filesystem::remove_all(dbName);
     std::filesystem::create_directory(dbName);
 
@@ -17,7 +17,7 @@ public:
     if (collectStats) {
       sprintf(
         connection_config,
-        "create,statistics=(all),direct_io=[data],cache_size=%dMB,statistics_log=(wait=100000,json=true,on_close=true)",
+        "create,statistics=(all),direct_io=[data],cache_size=%dMB,statistics_log=(wait=30,json=true,on_close=true)",
         cache_size_mb);
     } else {
       sprintf(

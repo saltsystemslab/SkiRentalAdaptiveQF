@@ -44,37 +44,21 @@ int run_benchmark(BenchmarkParams params) {
     abort();
   }
   DbStorageEngine db;
-  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, false /*collectStats*/, true /* clear OldDB*/);
   for (uint64_t i = 0; i < numInserts; i++) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
+  db.close();
+  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/);
 
+  QFilterQueryResult qfFilterQueryResult;
   uint64_t fpCount = 0;
   uint64_t numQueriesPerRound = numQueries / numRounds;
-
   uint64_t total_adversarial_queries_count = 0;
 	uint64_t *adv_queries = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
   uint64_t cur_adv_query = 0;
   uint64_t adv_query_size = 0;
-  // std::queue<uint64_t> adv_queries;
-  // std::unordered_map<uint64_t, uint64_t> adv_queries_count;
 
-  // Warmup Queries
-  QFilterQueryResult qfFilterQueryResult;
-  for (uint32_t r = 0; r < numRounds/4; r++) {
-    for (uint64_t i = 0; i < numQueriesPerRound; i++) {
-      uint64_t queryIdx = r * numQueriesPerRound + i;
-      uint64_t queryKey = querySet[queryIdx];
-      qf.queryFilter(queryKey, &qfFilterQueryResult);
-      if (qfFilterQueryResult.key_present) {
-        if (!db.searchKV(queryKey)) {
-          fpCount++;
-        } 
-      }
-    }
-  }
-
-  fpCount = 0;
   auto bench_start = std::chrono::high_resolution_clock::now();
   for (uint32_t r = 0; r < numRounds; r++) {
     auto round_start = std::chrono::high_resolution_clock::now();

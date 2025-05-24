@@ -8,7 +8,7 @@ extern "C" {
 
 class DummyDBBackingStore {
 public:
-  int init(char *dbName, int quotient_remainder_bits, int cache_size_mb, int collectDBStats) {
+  int init(char *dbName, int quotient_remainder_bits, int cache_size_mb, int collectDBStats, bool clearOld) {
     this->quotient_remainder_bits = quotient_remainder_bits;
     return 0;
   }

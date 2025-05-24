@@ -586,6 +586,7 @@ static inline uint64_t block_offset(const QF *qf, uint64_t blockidx)
 	/* If we have extended counters and a 16-bit (or larger) offset
 		 field, then we can safely ignore the possibility of overflowing
 		 that field. */
+  // BLOCK_OFFSET_UPDATE
 	if (sizeof(qf->blocks[0].offset) > 1 || 
 			get_block(qf, blockidx)->offset < BITMASK(8*sizeof(qf->blocks[0].offset)))
 		return get_block(qf, blockidx)->offset;
@@ -646,6 +647,7 @@ static inline int offset_lower_bound(const QF *qf, uint64_t slot_index)
 	}*/
 	const qfblock * b = get_block(qf, slot_index / QF_SLOTS_PER_BLOCK);
 	const uint64_t slot_offset = slot_index % QF_SLOTS_PER_BLOCK;
+  // BLOCK_OFFSET_UPDATE
 	const uint64_t boffset = b->offset;
 	const uint64_t occupieds = b->occupieds[0] & BITMASK(slot_offset+1);
 	assert(QF_SLOTS_PER_BLOCK == 64);
@@ -941,6 +943,7 @@ static inline int remove_replace_slots_and_shift_remainders_and_runends_and_offs
 			// runend spans across the block
 			// update the offset of the next block
 			if (runend_index / QF_SLOTS_PER_BLOCK == original_block) { // if the run ends in the same block
+        // BLOCK_OFFSET_UPDATE
 				if (get_block(qf, original_block + 1)->offset == 0)
 					break;
 				get_block(qf, original_block + 1)->offset = 0;
@@ -1003,8 +1006,9 @@ static inline int insert_one_slot(QF *qf, uint64_t target_index, uint64_t insert
 	
 	uint64_t i; // increment offset for all blocks that the shift pushed into
 	for (i = target_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
+    // BLOCK_OFFSET_UPDATE
 		if (get_block(qf, i)->offset < BITMASK(8*sizeof(qf->blocks[0].offset))) {
-			get_block(qf, i)->offset++;
+			get_block(qf, i)->offset++; //If offset overflows, we're in trouble.
 			record(qf, "nudge", (value & BITMASK(qf->metadata->bits_per_slot)) | (target_index << qf->metadata->bits_per_slot)
 					| ((value >> qf->metadata->bits_per_slot) << (qf->metadata->quotient_bits + qf->metadata->bits_per_slot)), i);
 		}
@@ -1039,6 +1043,7 @@ static inline int insert_one_slot_debug(QF *qf, uint64_t target_index, uint64_t 
 	
 	uint64_t i; // increment offset for all blocks that the shift pushed into
 	for (i = target_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
+    // BLOCK_OFFSET_UPDATE
 		if (get_block(qf, i)->offset < BITMASK(8*sizeof(qf->blocks[0].offset))) {
 			get_block(qf, i)->offset++;
 			record(qf, "nudge", (value & BITMASK(qf->metadata->bits_per_slot)) | (target_index << qf->metadata->bits_per_slot)
@@ -2383,7 +2388,7 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 
 			uint64_t i;
 			for (i = hash_bucket_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
-				if (get_block(qf, i)->offset < BITMASK(8 * sizeof(qf->blocks[0].offset))) get_block(qf, i)->offset++;
+				if (get_block(qf, i)->offset < BITMASK(8 * sizeof(qf->blocks[0].offset))) get_block(qf, i)->offset++; // BLOCK_OFFSET_UPDATE
 			}
 
 			METADATA_WORD(qf, extensions, index + slots_used) |= 1ULL << ((index + slots_used) % 64);
@@ -2789,6 +2794,7 @@ static inline uint64_t _merge_insert(QF *qf, uint64_t index, uint64_t run, uint6
 	if (current_block != bucket_block) {
 		for (int i = index; i < current; i++) {
 			if (i / QF_SLOTS_PER_BLOCK != bucket_block) {
+        // BLOCK_OFFSET_UPDATE
 				get_block(qf, i / QF_SLOTS_PER_BLOCK)->offset++;
 			}
 		}

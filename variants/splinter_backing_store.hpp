@@ -8,12 +8,15 @@ extern "C" {
 
 class SplinterDBBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
     dbName = dbName + "_splinterDb";
     data_cfg = qf_data_config_init();
     splinterdb_cfg = qf_splinterdb_config_init(dbName.c_str(), &data_cfg);
     splinterdb_cfg.cache_size = cache_size_mb * Mega;
-    remove(splinterdb_cfg.filename);
+    
+    if (clearOld) {
+      remove(splinterdb_cfg.filename);
+    }
     if (splinterdb_create(&splinterdb_cfg, &db)) {
       return -1;
     }
