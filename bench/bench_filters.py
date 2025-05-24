@@ -2,7 +2,7 @@ from sacred import Experiment
 import os
 
 ex = Experiment()
-filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive']
+filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive', 'coinFlip']
 
 @ex.config
 def test_config():
@@ -73,7 +73,6 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
     os.system('python3 ./bench/parse_db_stats.py .')
     ex.add_artifact('db_stats.csv')
     ex.add_artifact('rm_stats.csv')
-
 
 @ex.automain
 def run_experiment():

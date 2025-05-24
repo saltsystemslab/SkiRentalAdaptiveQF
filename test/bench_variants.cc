@@ -11,6 +11,7 @@
 #include "qf_filter.hpp"
 #include "rski_adaptive_filter.hpp"
 #include "splinter_backing_store.hpp"
+#include "coin_flip_adaptive.hpp"
 #include "wiredtiger_backing_store.hpp"
 
 
@@ -146,6 +147,10 @@ int run_benchmark_with_storage_engine(
   }
   if (filterType == "rSkiAdaptive") {
     ret = run_benchmark<DbStorageEngine, RSkiAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
+  if (filterType == "coinFlip") {
+    ret = run_benchmark<DbStorageEngine, CoinFlipAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
   return ret;
