@@ -36,6 +36,7 @@ for filter in filters:
     db_stats_summary.append(stats_summary)
 
 stats_summary = pd.DataFrame(db_stats_summary)
+stats_summary.to_csv('db_stats.csv')
 print(stats_summary)
 
 filters = ['adaptive', 'rSkiAdaptive', 'dSkiAdaptive']
@@ -53,4 +54,5 @@ for filter in filters:
     rm_stats_summary.append(stats_summary)
 
 stats_summary = pd.DataFrame(rm_stats_summary)
+stats_summary.to_csv('rm_stats.csv')
 print(stats_summary)

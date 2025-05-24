@@ -70,6 +70,9 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
             if filter != 'nonAdaptive':
                 os.system('jq . reverseMap_wiredTiger/WiredTigerStat* > %s_rm_stats.json' % filter)
                 ex.add_artifact('%s_rm_stats.json' % filter)
+    os.system('python3 ./bench/parse_db_stats.py .')
+    ex.add_artifact('db_stats.csv')
+    ex.add_artifact('rm_stats.csv')
 
 
 @ex.automain
