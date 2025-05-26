@@ -12,6 +12,7 @@
 #include "rski_adaptive_filter.hpp"
 #include "splinter_backing_store.hpp"
 #include "coin_flip_adaptive.hpp"
+#include "block_counter_adaptive.hpp"
 #include "wiredtiger_backing_store.hpp"
 
 
@@ -151,6 +152,10 @@ int run_benchmark_with_storage_engine(
   }
   if (filterType == "coinFlip") {
     ret = run_benchmark<DbStorageEngine, CoinFlipAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
+  if (filterType == "blockCount") {
+    ret = run_benchmark<DbStorageEngine, BlockCounterAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
   return ret;

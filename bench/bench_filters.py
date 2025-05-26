@@ -2,7 +2,7 @@ from sacred import Experiment
 import os
 
 ex = Experiment()
-filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive', 'coinFlip']
+filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive', 'coinFlip', 'blockCount']
 
 @ex.config
 def test_config():
@@ -53,6 +53,10 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         '--breakEven': break_even,
     }
     for filter in filters:
+        if filter == 'blockCount':
+            os.system('make clean && make bench_variants SEVEN_BIT_OFFSET=1')
+        else:
+            os.system('make clean && make bench_variants')
         cmd = "./bench_variants --filter %s " % filter
         for arg_name in argDict:
             cmd = cmd + (' %s %s' % (arg_name, argDict[arg_name]))

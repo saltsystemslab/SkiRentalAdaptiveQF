@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         querySet[queryIdx] = querySet[queryIdx] | ((insertSet[i % numInserts]) & minirun_bitmask);
       }
     }
-  } else if (queryWorkload == "uniform") {
+  } else if (queryWorkload == "uniform" || queryWorkload == "adversarial") {
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
   } else if (queryWorkload == "zipfian") {
@@ -156,9 +156,7 @@ int main(int argc, char **argv) {
       querySet[i] = rand_zipfian(1.5f, 1ull << 63, querySet[i]);
       if (hashAgainForZipfian) {
         querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
-      } else {
-        
-      }
+      }     
     }
   } 
 

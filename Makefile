@@ -39,6 +39,10 @@ CXXFLAGS = -Wall $(DEBUG) $(PROFILE) $(OPT) $(ARCH) -m64 -I. -Iinclude -Iexterna
 LDFLAGS = $(DEBUG) $(PROFILE) $(OPT) -lpthread -lssl -lcrypto -lm -L$(SPLINTERPATH) -L$(WTPATH) -lsplinterdb -lwiredtiger -Wl,-rpath=$(SPLINTERPATH):$(WTPATH)
 #LDFLAGS += -L/usr/lib/ -lstxxl
 
+ifdef SEVEN_BIT_OFFSET
+		CXXFLAGS += -DSEVEN_BIT_OFFSET
+endif
+
 #
 # declaration of dependencies
 #

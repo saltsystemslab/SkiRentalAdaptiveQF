@@ -587,9 +587,14 @@ static inline uint64_t block_offset(const QF *qf, uint64_t blockidx)
 		 field, then we can safely ignore the possibility of overflowing
 		 that field. */
   // BLOCK_OFFSET_UPDATE
+#ifndef SEVEN_BIT_OFFSET
 	if (sizeof(qf->blocks[0].offset) > 1 || 
 			get_block(qf, blockidx)->offset < BITMASK(8*sizeof(qf->blocks[0].offset)))
 		return get_block(qf, blockidx)->offset;
+#else
+		if ((get_block(qf, blockidx)->offset & BITMASK(7)) < BITMASK(7))
+		  return get_block(qf, blockidx)->offset & BITMASK(7);
+#endif
 
 	return run_end(qf, QF_SLOTS_PER_BLOCK * blockidx - 1) - QF_SLOTS_PER_BLOCK *
 		blockidx + 1;
@@ -648,7 +653,11 @@ static inline int offset_lower_bound(const QF *qf, uint64_t slot_index)
 	const qfblock * b = get_block(qf, slot_index / QF_SLOTS_PER_BLOCK);
 	const uint64_t slot_offset = slot_index % QF_SLOTS_PER_BLOCK;
   // BLOCK_OFFSET_UPDATE
+#ifndef SEVEN_BIT_OFFSET
 	const uint64_t boffset = b->offset;
+#else
+	const uint64_t boffset = (b->offset & BITMASK(7));
+#endif
 	const uint64_t occupieds = b->occupieds[0] & BITMASK(slot_offset+1);
 	assert(QF_SLOTS_PER_BLOCK == 64);
 	if (boffset <= slot_offset) {
@@ -942,6 +951,7 @@ static inline int remove_replace_slots_and_shift_remainders_and_runends_and_offs
 			uint64_t runend_index = run_end(qf, last_occupieds_hash_index);
 			// runend spans across the block
 			// update the offset of the next block
+#ifndef SEVEN_BIT_OFFSET
 			if (runend_index / QF_SLOTS_PER_BLOCK == original_block) { // if the run ends in the same block
         // BLOCK_OFFSET_UPDATE
 				if (get_block(qf, original_block + 1)->offset == 0)
@@ -953,6 +963,20 @@ static inline int remove_replace_slots_and_shift_remainders_and_runends_and_offs
 				get_block(qf, original_block + 1)->offset = (runend_index - last_occupieds_hash_index);
 			}
 			original_block++;
+#else
+      uint8_t block_count_bit = (get_block(qf, original_block+1)->offset) & (1 << 7);
+      uint8_t offset = (get_block(qf, original_block+1)->offset & BITMASK(7));
+			if (runend_index / QF_SLOTS_PER_BLOCK == original_block) { // if the run ends in the same block
+				if (offset == 0)
+					break;
+				get_block(qf, original_block + 1)->offset = 0 | block_count_bit;
+			} else { // if the last run spans across the block
+				if (offset == (runend_index - last_occupieds_hash_index))
+					break;
+				get_block(qf, original_block + 1)->offset = (runend_index - last_occupieds_hash_index) | block_count_bit;
+			}
+			original_block++;
+#endif
 		}
 	}
 
@@ -1007,17 +1031,18 @@ static inline int insert_one_slot(QF *qf, uint64_t target_index, uint64_t insert
 	uint64_t i; // increment offset for all blocks that the shift pushed into
 	for (i = target_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
     // BLOCK_OFFSET_UPDATE
+#ifndef SEVEN_BIT_OFFSET
 		if (get_block(qf, i)->offset < BITMASK(8*sizeof(qf->blocks[0].offset))) {
 			get_block(qf, i)->offset++; //If offset overflows, we're in trouble.
 			record(qf, "nudge", (value & BITMASK(qf->metadata->bits_per_slot)) | (target_index << qf->metadata->bits_per_slot)
 					| ((value >> qf->metadata->bits_per_slot) << (qf->metadata->quotient_bits + qf->metadata->bits_per_slot)), i);
 		}
-		/*if (get_block(qf, i)->offset > 65) {
-			printf("%d\n", get_block(qf, i)->offset);
-		}*/
-		assert(get_block(qf, i)->offset != 0);
+#else
+		if ((get_block(qf, i)->offset & BITMASK(7)) < BITMASK(7)) {
+			get_block(qf, i)->offset++; //If offset overflows, we're in trouble.
+		}
+#endif
 	}
-	
 	return 1;
 }
 
@@ -1582,16 +1607,19 @@ int qf_get_count_using_ll_table_with_index(const QF *qf, uint64_t key, uint64_t 
 	if (runstart_index < hash_bucket_index)
 		runstart_index = hash_bucket_index;
 
+  uint8_t found = 0;
 	uint64_t current_index = runstart_index;
+	uint64_t ext, count;
 	*ret_minirun_rank = 0;
 	do {
 		if (get_slot(qf, current_index) == hash_remainder) { // if first slot matches, check remaining extensions
-			uint64_t ext, count;
 			int ext_len, count_len;
+      count = 0; found = 0;
 			get_slot_info(qf, current_index, &ext, &ext_len, &count, &count_len);
 			if (((*ret_hash >> (qf->metadata->quotient_bits + qf->metadata->bits_per_slot)) & BITMASK(qf->metadata->bits_per_slot * ext_len)) == ext) { // if extensions match, return the count
 				*ret_index = current_index;
-				return count;
+        found = 1;
+        break;
 			}
 			*ret_minirun_rank = *ret_minirun_rank + 1;
 			if (is_runend(qf, current_index++)) break; // if extensions don't match, stop if end of run, skip to next item otherwise
@@ -1603,7 +1631,19 @@ int qf_get_count_using_ll_table_with_index(const QF *qf, uint64_t key, uint64_t 
 		}
 	} while (current_index < qf->metadata->xnslots); // stop if reached the end of all items (should never actually reach this point because should stop at the runend)
 
-	return 0;
+#ifdef SEVEN_BIT_OFFSET
+  // count = 0, item not present
+  // count = 1, item present, but not a false positive before
+  // count = 129, item present and false positive before
+  if (found) {
+    fprintf("current_index: %lu offset: %lu\n", get_block(qf, current_index / QF_SLOTS_PER_BLOCK)->offset);
+    count = count + (get_block(qf, current_index / QF_SLOTS_PER_BLOCK)->offset & (1 << 7)); 
+    assert(count == 1 || count == 129);
+  } else {
+    count = 0;
+  }
+#endif
+	return count;
 }
 
 
@@ -1730,6 +1770,15 @@ int insert_and_extend_debug(QF *qf, uint64_t index, uint64_t key, uint64_t count
 	}
 
 	return extended_len;
+}
+
+int increment_block_counter(QF *qf, uint64_t index)
+{
+#ifndef SEVEN_BIT_OFFSET
+  abort();
+#endif
+  get_block(qf, index / QF_SLOTS_PER_BLOCK)->offset = get_block(qf, index / QF_SLOTS_PER_BLOCK)->offset | (1 << 7);
+  return 0;
 }
 
 
@@ -2388,7 +2437,11 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 
 			uint64_t i;
 			for (i = hash_bucket_index / QF_SLOTS_PER_BLOCK + 1; i <= empty_slot_index / QF_SLOTS_PER_BLOCK; i++) {
+#ifndef SEVEN_BIT_OFFSET
 				if (get_block(qf, i)->offset < BITMASK(8 * sizeof(qf->blocks[0].offset))) get_block(qf, i)->offset++; // BLOCK_OFFSET_UPDATE
+#else
+				if ((get_block(qf, i)->offset & BITMASK(7)) < BITMASK(7)) get_block(qf, i)->offset++; // BLOCK_OFFSET_UPDATE
+#endif
 			}
 
 			METADATA_WORD(qf, extensions, index + slots_used) |= 1ULL << ((index + slots_used) % 64);
@@ -2466,8 +2519,10 @@ int qf_adapt_using_ll_table(QF *qf, uint64_t orig_key, uint64_t fp_key, uint64_t
 			get_slot_info(qf, current_index, &hash_info, &hash_slots, &count_info, &count_slots);
 
 			if (curr_minirun_rank == minirun_rank) {
+#ifdef SEVEN_BIT_OFFSET
+        get_block(qf, current_index/QF_SLOTS_PER_BLOCK)->offset &= BITMASK(7);
+#endif
 				qf_adapt(qf, current_index, orig_key, fp_key, &hash_info, flags);
-
 				return 1;
 			}
 
