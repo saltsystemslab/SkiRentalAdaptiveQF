@@ -1631,18 +1631,17 @@ int qf_get_count_using_ll_table_with_index(const QF *qf, uint64_t key, uint64_t 
 		}
 	} while (current_index < qf->metadata->xnslots); // stop if reached the end of all items (should never actually reach this point because should stop at the runend)
 
-#ifdef SEVEN_BIT_OFFSET
   // count = 0, item not present
   // count = 1, item present, but not a false positive before
   // count = 129, item present and false positive before
   if (found) {
-    fprintf("current_index: %lu offset: %lu\n", get_block(qf, current_index / QF_SLOTS_PER_BLOCK)->offset);
+#ifdef SEVEN_BIT_OFFSET
     count = count + (get_block(qf, current_index / QF_SLOTS_PER_BLOCK)->offset & (1 << 7)); 
     assert(count == 1 || count == 129);
+#endif
   } else {
     count = 0;
   }
-#endif
 	return count;
 }
 
