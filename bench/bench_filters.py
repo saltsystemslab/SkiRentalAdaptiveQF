@@ -69,10 +69,12 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         ex.add_artifact('%s.csv' % filter)
 
         if collect_db_stats:
-            os.system('jq . database_wiredTiger/WiredTigerStat* > %s_db_stats.json' % filter)
+            #os.system('jq . database_wiredTiger/WiredTigerStat* > %s_db_stats.json' % filter)
+            os.system('cp database_wiredTiger/WiredTigerStat* %s_db_stats.json' % filter)
             ex.add_artifact('%s_db_stats.json' % filter)
             if filter != 'nonAdaptive':
-                os.system('jq . reverseMap_wiredTiger/WiredTigerStat* > %s_rm_stats.json' % filter)
+                #os.system('jq . reverseMap_wiredTiger/WiredTigerStat* > %s_rm_stats.json' % filter)
+                os.system('cp reverseMap_wiredTiger/WiredTigerStat* %s_rm_stats.json' % filter)
                 ex.add_artifact('%s_rm_stats.json' % filter)
     os.system('python3 ./bench/parse_db_stats.py .')
     ex.add_artifact('db_stats.csv')
