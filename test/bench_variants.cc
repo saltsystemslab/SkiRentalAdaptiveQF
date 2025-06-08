@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iostream>
 #include <stdio.h>
+#include <algorithm>
 #include <queue>
 
 #include "cxxopts.hpp"
@@ -15,6 +16,31 @@
 #include "block_counter_adaptive.hpp"
 #include "wiredtiger_backing_store.hpp"
 
+void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t> fp_miss_latencies, std::vector<uint64_t> adapt_latencies) {
+  sort(fp_miss_latencies.begin(), fp_miss_latencies.end());
+  sort(adapt_latencies.begin(), adapt_latencies.end());
+
+  FILE *latency_file = fopen(output_file_name.c_str(), "w");
+  fprintf(latency_file,"metric,numSamples,min,50p,99p,99.99p,max\n");
+
+  {
+  int p50 = fp_miss_latencies.size() / 2;
+  int p99 = fp_miss_latencies.size() * 0.99;
+  int p9999 = fp_miss_latencies.size() * 0.9999;
+  int max = fp_miss_latencies.size()-1;
+  fprintf(latency_file,"DbMiss,%lu,%lu,%lu,%lu,%lu,%lu\n", fp_miss_latencies.size(), fp_miss_latencies[0], fp_miss_latencies[p50], fp_miss_latencies[p99], fp_miss_latencies[p9999], fp_miss_latencies[max]);
+  }
+
+  {
+  int p50 = adapt_latencies.size() / 2;
+  int p99 = adapt_latencies.size() * 0.99;
+  int p9999 = adapt_latencies.size() * 0.9999;
+  int max = adapt_latencies.size()-1;
+  fprintf(latency_file,"Adapt,%lu,%lu,%lu,%lu,%lu,%lu\n", adapt_latencies.size(), adapt_latencies[0], adapt_latencies[p50], adapt_latencies[p99], adapt_latencies[p9999], adapt_latencies[max]);
+  }
+
+  fclose(latency_file);
+}
 
 template <typename DbStorageEngine, typename QFilter>
 int run_benchmark(BenchmarkParams params) {
@@ -25,9 +51,16 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t *querySet = params.querySet;
   uint64_t numQueries = params.numQueries;
   uint64_t numRounds = params.numRounds;
-  std::string output_file = params.output_file;
+  std::string output_file = params.output_file + ".csv";
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
+
+#ifdef PERF
+  double sampleRate = 0.9;
+  uint64_t sampleThreshold = INT_MAX * sampleRate;
+  std::vector<uint64_t> fp_miss_latencies;
+  std::vector<uint64_t> adapt_latencies;
+#endif
 
   std::cout << "Writing to " << output_file << std::endl;
   FILE *rounds_file = fopen(output_file.c_str(), "w");
@@ -41,16 +74,21 @@ int run_benchmark(BenchmarkParams params) {
   if (ret < 0) {
     abort();
   }
+  fprintf(stderr, "Sorting keys\n");
+  std::sort(insertSet, insertSet + numInserts);
+  fprintf(stderr, "Beginning bulkLoad\n");
   ret = qf.bulkLoad(insertSet, numInserts);
   if (ret < 0) {
     abort();
   }
   DbStorageEngine db;
+  fprintf(stderr, "Loading database\n");
   db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, false /*collectStats*/, true /* clear OldDB*/);
   for (uint64_t i = 0; i < numInserts; i++) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
   db.close();
+  fprintf(stderr, "Done. starting test\n");
   db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/);
 
   QFilterQueryResult qfFilterQueryResult;
@@ -77,16 +115,46 @@ int run_benchmark(BenchmarkParams params) {
         cur_adv_query++;
       }
 
+#ifdef PERF
+      std::chrono::time_point<std::chrono::high_resolution_clock> dbQueryStart, dbQueryEnd, adaptStart, adaptEnd;
+#endif
       qf.queryFilter(queryKey, &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
         if (is_adversarial && queryIdx % adversarial_freq != 0) {
           adv_queries[adv_query_size] = queryKey;
           adv_query_size++;
         }
-        if (!db.searchKV(queryKey)) {
+#ifdef PERF
+        bool sampleQuery = rand() < sampleThreshold;
+        if (sampleQuery && r==0) {
+          dbQueryStart = std::chrono::high_resolution_clock::now();
+        }
+#endif
+        int dbQueryResult = db.searchKV(queryKey);
+#ifdef PERF
+        if (sampleQuery && r==0) {
+          dbQueryEnd = std::chrono::high_resolution_clock::now();
+          uint64_t timeElapsed = (dbQueryEnd - dbQueryStart).count();
+          fp_miss_latencies.push_back(timeElapsed);
+        }
+
+#endif
+        if (!dbQueryResult) {
           fpCount++;
           roundFpCount++;
-          if (qf.adapt(queryKey, &qfFilterQueryResult)) {
+#ifdef PERF
+          if (sampleQuery && r==0) {
+            adaptStart = std::chrono::high_resolution_clock::now();
+          }
+#endif
+          int adaptRetCode = qf.adapt(queryKey, &qfFilterQueryResult);
+#ifdef PERF
+          if (sampleQuery && r==0) {
+            adaptEnd = std::chrono::high_resolution_clock::now();
+            adapt_latencies.push_back((adaptEnd - adaptStart).count());
+          }
+#endif
+          if (adaptRetCode) {
             return -1;
           }
         } else {
@@ -125,6 +193,10 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         qf.loadFactor());
   }
+#ifdef PERF
+  std::string latency_file_name = params.output_file + "_latency.csv";
+  write_latencies_to_file(latency_file_name.c_str(), fp_miss_latencies, adapt_latencies);
+#endif
   db.close();
   qf.close();
   return 0;
@@ -306,7 +378,7 @@ int main(int argc, char **argv) {
   params.querySet = querySet;
   params.numQueries = numQueries;
   params.numRounds = numRounds;
-  params.output_file = filterType + ".csv";
+  params.output_file = filterType;
   params.is_adversarial = 0;
   params.adversarial_freq = 100 / advFreq;
   params.shouldCollectDbStats = shouldCollectDbStats;

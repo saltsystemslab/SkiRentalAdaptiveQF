@@ -61,11 +61,18 @@ public:
     fingerprint = (fingerprint & minirunBitmask)
                   << (64 - quotient_remainder_bits);
     fingerprint = fingerprint + rank;
-    cursor->reset(cursor);
-    cursor->set_key(cursor, fingerprint);
-    cursor->set_value(cursor, key);
-    error_check(cursor->insert(cursor));
+    fingerprints.push_back(std::pair<uint64_t, uint64_t>(fingerprint, key));
     return 0;
+  }
+
+  void commitFingerprints() {
+    sort(fingerprints.begin(), fingerprints.end());
+    for (uint64_t i=0; i < fingerprints.size(); i++) {
+      cursor->reset(cursor);
+      cursor->set_key(cursor, fingerprints[i].first);
+      cursor->set_value(cursor, fingerprints[i].second);
+      error_check(cursor->insert(cursor));
+    }
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
@@ -88,6 +95,7 @@ public:
   }
 
 private:
+  std::vector<std::pair<uint64_t, uint64_t>> fingerprints;
   WT_CONNECTION *conn;
   WT_SESSION *session;
   WT_CURSOR *cursor;

@@ -19,17 +19,14 @@ public:
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
     uint64_t mask = -1;
-    uint64_t rank_offset = rank;
-    rank_offset = rank_offset << (64 - quotient_remainder_bits);
-
-    mask = mask << (64 - quotient_remainder_bits);
-    mask = mask - rank_offset;
-
+    mask = mask << quotient_remainder_bits;
     *value = fingerprint | mask; // Fill the higher order bits with 1's
     return 0;
   }
 
   int insertKV(uint64_t key, uint64_t value, int isUpdate) { return 0; }
+
+  void commitFingerprints() {}
 
   int searchKV(uint64_t key) {
     return 0; // Always false.

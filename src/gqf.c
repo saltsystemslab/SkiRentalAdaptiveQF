@@ -973,6 +973,7 @@ static inline int remove_replace_slots_and_shift_remainders_and_runends_and_offs
 			} else { // if the last run spans across the block
 				if (offset == (runend_index - last_occupieds_hash_index))
 					break;
+        if (runend_index - last_occupieds_hash_index >= BITMASK(7)) abort();
 				get_block(qf, original_block + 1)->offset = (runend_index - last_occupieds_hash_index) | block_count_bit;
 			}
 			original_block++;
@@ -2422,7 +2423,6 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 
 		uint64_t empty_slot_index = find_first_empty_slot(qf, index + slots_used);
 		if (empty_slot_index >= qf->metadata->xnslots) {
-			printf("adapt hit xnslots\n");
 			return QF_NO_SPACE; // maybe should do something about the now extraneous slots? allows for false negative
 		}
 

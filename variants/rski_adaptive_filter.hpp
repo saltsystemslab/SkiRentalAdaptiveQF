@@ -55,12 +55,12 @@ public:
       // Insert key into reverse map.
       uint64_t fingerprint = result.minirun_id;
       uint64_t value = keys[i];
-      ret =
-          reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
+      ret = reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
       if (ret < 0) {
         return -1;
       }
     }
+    reverseMap.commitFingerprints();
     reverseMap.close();
     reverseMap.init("reverseMap", config.qbits + config.rbits, benchParams.reverseMapCacheSizeMB, benchParams.shouldCollectDbStats, false);
     return 0;
@@ -90,7 +90,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= fullPoint) {
-      return -1; // Don't have space to adapt more.
+      return 0; // Don't have space to adapt more.
     }
     if (!coin_flip(filterResult->minirun_count)) {
       uint64_t hash = filterResult->hash;
@@ -109,10 +109,6 @@ public:
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
 
-      int count = 0;
-      // Adapt ALL miniruns NOW.
-      while (filterResult->key_present) {
-        count++;
         int ret = reverseMap.getFingerprint(
             fingerprint, filterResult->minirun_rank, &origKey);
         if (ret) {
@@ -121,8 +117,6 @@ public:
         }
         ret = qf_adapt_using_ll_table(
             &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        queryFilter(queryKey, filterResult);
-      }
     }
     return 0;
   }

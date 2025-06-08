@@ -19,10 +19,16 @@ def test_config():
     break_even = 24
     collect_db_stats=False
     hash_again_for_zipfian=False
+    measure_latency=False
+    storage_cache_size_mb=64
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, _seed):
-    os.system('make clean && make bench_variants workload_gen')
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, measure_latency, storage_cache_size_mb, _seed):
+    extra_build_flags = ''
+    if measure_latency:
+        extra_build_flags = ' LATENCY=1'
+
+    os.system('make clean && make bench_variants workload_gen' + extra_build_flags)
     argDict = {
         '-q': quotient_bits,
         '-r': remainder_bits,
@@ -49,14 +55,15 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         '--queryWorkload': query_workload,
         '--storageEngine': storage_engine,
         '--reverseMapEngine': reverse_map_engine,
+        '--storageCacheSizeMB': str(storage_cache_size_mb),
         '--advFreq': adv_freq,
         '--breakEven': break_even,
     }
     for filter in filters:
         if filter == 'blockCount':
-            os.system('make clean && make bench_variants SEVEN_BIT_OFFSET=1')
+            os.system('make clean && make bench_variants SEVEN_BIT_OFFSET=1' + extra_build_flags)
         else:
-            os.system('make clean && make bench_variants')
+            os.system('make clean && make bench_variants' + extra_build_flags)
         cmd = "./bench_variants --filter %s " % filter
         for arg_name in argDict:
             cmd = cmd + (' %s %s' % (arg_name, argDict[arg_name]))
@@ -67,6 +74,8 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         print(cmd)
         os.system(cmd)
         ex.add_artifact('%s.csv' % filter)
+        if measure_latency:
+            ex.add_artifact('%s_latency.csv' % filter)
 
         if collect_db_stats:
             #os.system('jq . database_wiredTiger/WiredTigerStat* > %s_db_stats.json' % filter)

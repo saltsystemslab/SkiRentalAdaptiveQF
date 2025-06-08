@@ -60,6 +60,7 @@ public:
         return -1;
       }
     }
+    reverseMap.commitFingerprints();
     reverseMap.close();
     reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, benchmarkParams.reverseMapCacheSizeMB, benchmarkParams.shouldCollectDbStats, false);
     return 0;
@@ -107,7 +108,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= fullPoint) {
-      return -1; // Don't have space to adapt more.
+      return 0; // Don't have space to adapt more.
     }
     if (filterResult->minirun_count < breakEvenCount) {
       uint64_t hash = filterResult->hash;
@@ -127,19 +128,14 @@ public:
       uint64_t fingerprint = filterResult->hash;
 
       int count = 0;
-      // Adapt ALL miniruns NOW.
-      while (filterResult->key_present) {
-        count++;
-        int ret = reverseMap.getFingerprint(
-            fingerprint, filterResult->minirun_rank, &origKey);
-        if (ret) {
-          printf("fingerprint fetch failed\n");
-          return -1;
-        }
-        ret = qf_adapt_using_ll_table(
-            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        queryFilter(queryKey, filterResult);
+      int ret = reverseMap.getFingerprint(
+          fingerprint, filterResult->minirun_rank, &origKey);
+      if (ret) {
+        printf("fingerprint fetch failed\n");
+        return -1;
       }
+      ret = qf_adapt_using_ll_table(
+          &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
 
 #if DEBUG
       uint8_t old_minirun_rank = filterResult->minirun_rank;

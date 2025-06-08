@@ -111,6 +111,42 @@ int test_counters() {
 
 }
 
+int test_seven_bit_offset() {
+	size_t qbits = 16;
+	size_t rbits = 16;
+
+	size_t num_slots = 1ull << qbits;
+	size_t minirun_id_bitmask = (1ull << (qbits + rbits)) - 1;
+
+	QF qf;
+	if (!qf_malloc(&qf, num_slots, qbits + rbits, 0, QF_HASH_INVERTIBLE, 0)) {
+    return -1;
+	}
+
+	qf_insert_result result;
+  int num_keys = 1024;
+  uint64_t keys[num_keys];
+  for (int i=0; i < num_keys; i++) {
+   keys[i] = i + 256;
+	 int ret = qf_insert_using_ll_table(&qf, keys[i], 1, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
+   if (ret < 0) abort();
+  }
+  // assert(block_offset(qf, 0) == 256); 
+
+#ifndef SEVEN_BIT_OFFSET
+  uint8_t offset = 255;
+#else 
+  uint8_t offset = 127;
+#endif
+  for (int i=1; i<16; i++) {
+    printf("%d %u\n", i, get_block(&qf, i)->offset);
+  //assert(get_block(&qf, i)->offset == offset);
+  }
+  assert(get_block(&qf, 15)->offset == 64);
+  return 0;
+
+}
+
 
 int test_merged_setup() { 
 	size_t qbits = 8;
@@ -270,5 +306,7 @@ int main(int argc, char **argv)
     test_split_setup();
   } else if (test_to_run == 3) {
     test_counters();
+  } else if (test_to_run == 4) {
+    test_seven_bit_offset();
   }
 }

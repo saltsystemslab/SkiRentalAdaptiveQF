@@ -52,6 +52,7 @@ public:
         return -1;
       }
     }
+    reverseMap.commitFingerprints();
     reverseMap.close();
     reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, benchmarkParams.reverseMapCacheSizeMB, benchmarkParams.shouldCollectDbStats, false);
     return 0;
@@ -88,23 +89,11 @@ public:
       uint64_t hash_index = filterResult->hash_index;
       uint64_t ret_hash, ret_other_hash; // Unused, part of API.
                                          //
-      printf("Before incrementing key: %lu at hashIndex %lu count: %lu\n", queryKey, filterResult->hash_index, filterResult->minirun_count);
       increment_block_counter(&qf, hash_index);
-      queryFilter(queryKey, filterResult);
-      printf("After incrementing key: %lu at hashIndex: %lu count: %lu\n", queryKey, filterResult->hash_index, filterResult->minirun_count);
-      if (!filterResult->key_present) {
-        printf("Key not found after incrementing\n");
-      }
-
     } else {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
-
-      int count = 0;
-      // Adapt ALL miniruns NOW.
-      while (filterResult->key_present) {
-        count++;
-        int ret = reverseMap.getFingerprint(
+      int ret = reverseMap.getFingerprint(
             fingerprint, filterResult->minirun_rank, &origKey);
         if (ret) {
           printf("fingerprint fetch failed\n");
@@ -112,8 +101,6 @@ public:
         }
         ret = qf_adapt_using_ll_table(
             &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        queryFilter(queryKey, filterResult);
-      }
     }
     return 0;
   }

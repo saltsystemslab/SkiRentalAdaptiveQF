@@ -78,6 +78,7 @@ public:
   }
 
   int close() { return 0; }
+  void commitFingerprints() {}
 
 private:
   data_config data_cfg;

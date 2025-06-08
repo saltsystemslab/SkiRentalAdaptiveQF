@@ -55,6 +55,7 @@ public:
         return -1;
       }
     }
+    reverseMap.commitFingerprints();
     reverseMap.close();
     reverseMap.init("reverseMap", config.qbits + config.rbits, benchParams.reverseMapCacheSizeMB, benchParams.shouldCollectDbStats, false);
     return 0;
@@ -90,20 +91,14 @@ public:
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
 
-      int count = 0;
-      // Adapt ALL miniruns NOW.
-      while (filterResult->key_present) {
-        count++;
-        int ret = reverseMap.getFingerprint(
+      int ret = reverseMap.getFingerprint(
             fingerprint, filterResult->minirun_rank, &origKey);
-        if (ret) {
+      if (ret) {
           printf("fingerprint fetch failed\n");
           return -1;
-        }
-        ret = qf_adapt_using_ll_table(
-            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        queryFilter(queryKey, filterResult);
       }
+      ret = qf_adapt_using_ll_table(
+          &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
     }
     return 0;
   }

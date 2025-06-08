@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <openssl/rand.h>
+#include <random>
 
 #include "cxxopts.hpp"
 
@@ -143,12 +144,52 @@ int main(int argc, char **argv) {
         // Create a random key having a fingerprint from the insert set.
         uint64_t queryIdx = r * numQueriesPerRound + i;
         querySet[queryIdx] = querySet[queryIdx] << (qbits + rbits);
-        querySet[queryIdx] = querySet[queryIdx] | ((insertSet[i % numInserts]) & minirun_bitmask);
+        querySet[queryIdx] = querySet[queryIdx] | ((insertSet[insertIndex]) & minirun_bitmask);
       }
     }
   } else if (queryWorkload == "uniform" || queryWorkload == "adversarial") {
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+  } else if (queryWorkload == "normal") {
+    uint64_t numUniqueQueries = numQueries/5;
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    std::random_device rd;
+    std::mt19937 gen;
+    std::normal_distribution<double> dist(0.0, 1.0);
+    std::vector<double> weights;
+    double minWeight = std::numeric_limits<double>::max();
+    for (uint64_t i=0; i < numUniqueQueries; i++) {
+      weights.push_back(dist(gen));
+      minWeight = std::min(weights[i], minWeight);
+    }
+    for (uint64_t i=0; i<numUniqueQueries; i++) {
+      weights[i] -= minWeight - 0.001;
+    }
+    std::discrete_distribution<> normalDist(weights.begin(), weights.end());
+    for (uint64_t i=0; i < numQueries; i++) {
+      querySet[i] = normalDist(gen);
+      querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
+    }
+  } else if (queryWorkload == "lognormal") {
+    uint64_t numUniqueQueries = numQueries/5;
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    std::random_device rd;
+    std::mt19937 gen;
+    std::lognormal_distribution<double> dist(0.0, 1.0);
+    std::vector<double> weights;
+    double minWeight = std::numeric_limits<double>::max();
+    for (uint64_t i=0; i < numUniqueQueries; i++) {
+      weights.push_back(dist(gen));
+      minWeight = std::min(weights[i], minWeight);
+    }
+    for (uint64_t i=0; i<numUniqueQueries; i++) {
+      weights.push_back(dist(gen));
+    }
+    std::discrete_distribution<> normalDist(weights.begin(), weights.end());
+    for (uint64_t i=0; i < numQueries; i++) {
+      querySet[i] = normalDist(gen);
+      querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
+    }
   } else if (queryWorkload == "zipfian") {
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));

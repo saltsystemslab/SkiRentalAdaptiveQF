@@ -49,6 +49,7 @@ public:
         return -1;
       }
     }
+    reverseMap.commitFingerprints();
     reverseMap.close();
     reverseMap.init("reverseMap", config.qbits + config.rbits, benchParams.reverseMapCacheSizeMB, benchParams.shouldCollectDbStats, false);
     return 0;
@@ -70,7 +71,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= full_point) {
-      return -1; // Don't have space to adapt more.
+      return 0; // Don't have space to adapt more.
     }
     uint64_t origKey;
     uint64_t fingerprint = filterResult->hash;
