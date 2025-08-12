@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         // Create a random key having a fingerprint from the insert set.
         uint64_t queryIdx = r * numQueriesPerRound + i;
         querySet[queryIdx] = querySet[queryIdx] << (qbits + rbits);
-        querySet[queryIdx] = querySet[queryIdx] | ((insertSet[insertIndex]) & minirun_bitmask);
+        querySet[queryIdx] = querySet[queryIdx] | ((insertSet[queryIdx % numInserts]) & minirun_bitmask);
       }
     }
   } else if (queryWorkload == "uniform" || queryWorkload == "adversarial") {
