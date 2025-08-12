@@ -71,7 +71,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= full_point) {
-      return 0; // Don't have space to adapt more.
+      return -1; // Don't have space to adapt more.
     }
     uint64_t origKey;
     uint64_t fingerprint = filterResult->hash;
@@ -79,7 +79,7 @@ public:
         fingerprint, filterResult->minirun_rank, &origKey);
     qf_adapt_using_ll_table(
         &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-    return 0;
+    return 1;
   }
 
   double loadFactor() {

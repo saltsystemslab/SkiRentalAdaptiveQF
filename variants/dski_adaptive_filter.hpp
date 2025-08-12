@@ -108,7 +108,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= fullPoint) {
-      return 0; // Don't have space to adapt more.
+      return -1; // Don't have space to adapt more.
     }
     if (filterResult->minirun_count < breakEvenCount) {
       uint64_t hash = filterResult->hash;
@@ -123,6 +123,7 @@ public:
           &ret_hash,
           &ret_other_hash,
           QF_KEY_IS_HASH);
+          return 0;
     } else {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
@@ -136,6 +137,7 @@ public:
       }
       ret = qf_adapt_using_ll_table(
           &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+      return 1;
 
 #if DEBUG
       uint8_t old_minirun_rank = filterResult->minirun_rank;

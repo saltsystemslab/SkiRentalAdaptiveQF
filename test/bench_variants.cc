@@ -67,7 +67,7 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(
       rounds_file,
       "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
-      "load_factor\n");
+      "round_adapts cumulative_adapts load_factor\n");
 
   int ret = 0;
   ret = qf.construct(params);
@@ -93,6 +93,7 @@ int run_benchmark(BenchmarkParams params) {
 
   QFilterQueryResult qfFilterQueryResult;
   uint64_t fpCount = 0;
+  uint64_t adaptCount = 0;
   uint64_t numQueriesPerRound = numQueries / numRounds;
   uint64_t total_adversarial_queries_count = 0;
 	uint64_t *adv_queries = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
@@ -103,6 +104,7 @@ int run_benchmark(BenchmarkParams params) {
   for (uint32_t r = 0; r < numRounds; r++) {
     auto round_start = std::chrono::high_resolution_clock::now();
     uint64_t roundFpCount = 0;
+    uint64_t roundAdaptCount = 0;
     uint64_t roundTruePositive = 0;
     for (uint64_t i = 0; i < numQueriesPerRound; i++) {
       uint64_t queryIdx = r * numQueriesPerRound + i;
@@ -154,8 +156,11 @@ int run_benchmark(BenchmarkParams params) {
             adapt_latencies.push_back((adaptEnd - adaptStart).count());
           }
 #endif
-          if (adaptRetCode) {
+          if (adaptRetCode == -1) {
             return -1;
+          } else {
+            roundAdaptCount += adaptRetCode;
+            adaptCount += adaptRetCode;
           }
         } else {
           roundTruePositive++;
@@ -172,7 +177,7 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -180,10 +185,12 @@ int run_benchmark(BenchmarkParams params) {
         cumulativeThroughput,
         fpCount,
         total_adversarial_queries_count,
+        roundAdaptCount,
+        adaptCount,
         qf.loadFactor());
     fprintf(
         stdout,
-        "%d %f %lu %lu %f %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -191,6 +198,8 @@ int run_benchmark(BenchmarkParams params) {
         cumulativeThroughput,
         fpCount,
         total_adversarial_queries_count,
+        roundAdaptCount,
+        adaptCount,
         qf.loadFactor());
   }
 #ifdef PERF

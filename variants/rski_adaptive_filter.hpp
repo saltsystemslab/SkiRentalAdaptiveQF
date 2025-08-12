@@ -105,6 +105,7 @@ public:
           &ret_hash,
           &ret_other_hash,
           QF_KEY_IS_HASH);
+        return 0;
     } else {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
@@ -117,6 +118,7 @@ public:
         }
         ret = qf_adapt_using_ll_table(
             &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+        return 1;
     }
     return 0;
   }
