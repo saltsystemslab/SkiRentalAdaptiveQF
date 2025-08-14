@@ -19,14 +19,14 @@ def test_config():
     break_even = 24
     collect_db_stats=False
     hash_again_for_zipfian=False
-    measure_latency=False
+    capture_extra_stats=False
     storage_cache_size_mb=64
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, measure_latency, storage_cache_size_mb, _seed):
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, capture_extra_stats, storage_cache_size_mb, _seed):
     extra_build_flags = ''
-    if measure_latency:
-        extra_build_flags = ' LATENCY=1'
+    if capture_extra_stats:
+        extra_build_flags = ' EXTRA_STATS=1'
 
     os.system('make clean && make bench_variants workload_gen' + extra_build_flags)
     argDict = {
@@ -74,8 +74,9 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         print(cmd)
         os.system(cmd)
         ex.add_artifact('%s.csv' % filter)
-        if measure_latency:
+        if capture_extra_stats:
             ex.add_artifact('%s_latency.csv' % filter)
+            ex.add_artifact('%s_fp_stats.csv' % filter)
 
         if collect_db_stats:
             #os.system('jq . database_wiredTiger/WiredTigerStat* > %s_db_stats.json' % filter)

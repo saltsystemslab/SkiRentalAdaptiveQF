@@ -43,7 +43,7 @@ ifdef SEVEN_BIT_OFFSET
 		CXXFLAGS += -DSEVEN_BIT_OFFSET
 endif
 
-ifdef LATENCY
+ifdef EXTRA_STATS
 		CXXFLAGS += -DPERF
 endif
 

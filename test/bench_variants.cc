@@ -42,6 +42,22 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   fclose(latency_file);
 }
 
+void write_fp_stats_to_file(std::string output_file_name, std::unordered_map<uint64_t, uint64_t> fp_freq) {
+  FILE *fp_stats_file = fopen(output_file_name.c_str(), "w");
+  fprintf(fp_stats_file,"freq,count\n");
+
+  std::map<uint64_t, uint64_t> freq_dist;
+  for (const auto& it: fp_freq) {
+    freq_dist[it.second]++;
+  }
+
+  for (const auto &it: freq_dist) {
+    fprintf(fp_stats_file, "%lu %lu\n", it.first, it.second);
+  }
+
+  fclose(fp_stats_file);
+}
+
 template <typename DbStorageEngine, typename QFilter>
 int run_benchmark(BenchmarkParams params) {
   QFilter qf;
@@ -59,6 +75,7 @@ int run_benchmark(BenchmarkParams params) {
   double sampleRate = 0.9;
   uint64_t sampleThreshold = INT_MAX * sampleRate;
   std::vector<uint64_t> fp_miss_latencies;
+  std::unordered_map<uint64_t, uint64_t> fp_freq;
   std::vector<uint64_t> adapt_latencies;
 #endif
 
@@ -127,6 +144,7 @@ int run_benchmark(BenchmarkParams params) {
           adv_query_size++;
         }
 #ifdef PERF
+        fp_freq[queryKey]++;
         bool sampleQuery = rand() < sampleThreshold;
         if (sampleQuery && r==0) {
           dbQueryStart = std::chrono::high_resolution_clock::now();
@@ -205,6 +223,9 @@ int run_benchmark(BenchmarkParams params) {
 #ifdef PERF
   std::string latency_file_name = params.output_file + "_latency.csv";
   write_latencies_to_file(latency_file_name.c_str(), fp_miss_latencies, adapt_latencies);
+
+  std::string fp_stats_file = params.output_file + "_fp_stats.csv";
+  write_fp_stats_to_file(fp_stats_file.c_str(), fp_freq);
 #endif
   db.close();
   qf.close();
