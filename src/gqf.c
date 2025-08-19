@@ -2458,6 +2458,7 @@ static inline int adapt(QF *qf, uint64_t index, uint64_t hash_bucket_index, uint
 			*ret_hash |= (hash & BITMASK(qf->metadata->bits_per_slot)) << (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot);
 			ext_bits += qf->metadata->bits_per_slot;
 			count_len = 0;
+			slots_used++;
 		}
 	} while (((hash & BITMASK(qf->metadata->bits_per_slot)) == (other_hash & BITMASK(qf->metadata->bits_per_slot))) && (ext_bits + qf->metadata->quotient_bits + qf->metadata->bits_per_slot < 64));
 
