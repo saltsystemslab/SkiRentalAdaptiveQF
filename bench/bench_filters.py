@@ -74,6 +74,7 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         print(cmd)
         os.system(cmd)
         ex.add_artifact('%s.csv' % filter)
+        ex.add_artifact('%s_micro.csv' % filter)
         if capture_extra_stats:
             ex.add_artifact('%s_latency.csv' % filter)
             ex.add_artifact('%s_fp_stats.csv' % filter)

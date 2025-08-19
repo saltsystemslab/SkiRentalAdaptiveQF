@@ -42,6 +42,13 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   fclose(latency_file);
 }
 
+void write_microbench_to_file(std::string output_file_name, uint64_t numTpQueries, uint64_t tpTimeUs, uint64_t numTp, uint64_t numFpQueries, uint64_t fpTimeUs, uint64_t numFp) {
+  FILE *microbench_file = fopen(output_file_name.c_str(), "w");
+  fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numTpQueries, tpTimeUs, (1.0*numTpQueries)/(tpTimeUs));
+  fprintf(microbench_file,"False Queries: %lu\nFalse Queries(us): %lu\nFalse Queries Thput: %lf\n", numFpQueries, fpTimeUs, (1.0*numFpQueries)/(fpTimeUs));
+  fclose(microbench_file);
+}
+
 void write_fp_stats_to_file(std::string output_file_name, std::unordered_map<uint64_t, uint64_t> fp_freq) {
   FILE *fp_stats_file = fopen(output_file_name.c_str(), "w");
   fprintf(fp_stats_file,"freq count\n");
@@ -228,6 +235,37 @@ int run_benchmark(BenchmarkParams params) {
   write_fp_stats_to_file(fp_stats_file.c_str(), fp_freq);
 #endif
   db.close();
+
+// Run Microbenchmarks with only in-memory operations at end of the load test
+
+// True queries: Randomly query the insert set.
+  uint64_t numTp = 0;
+  auto tp_query_start = std::chrono::high_resolution_clock::now();
+  for (uint64_t i=0; i < numInserts; i++) {
+      qf.queryFilter(insertSet[i], &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present) numTp++;
+      else {
+        printf("Key[%lu] not found: %lu\n", i, insertSet[i]);
+        abort(); // Should not happen.... This means filter returned false negative.
+      }
+  }
+  auto tp_query_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> tp_overall_duration =
+        tp_query_end - tp_query_start;
+
+// Negative queries: Query false positives again, but only measure the throughput.
+  uint64_t numFp=0;
+  auto fp_query_start = std::chrono::high_resolution_clock::now();
+  for (uint64_t i=0; i < numQueries; i++) {
+      qf.queryFilter(querySet[i], &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present) numFp++;
+  }
+  auto fp_query_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> fp_overall_duration =
+        fp_query_end - fp_query_start;
+  std::string micro_file_name = params.output_file + "_micro.csv";
+  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numTp, numQueries, fp_overall_duration.count(), numFp);
+
   qf.close();
   return 0;
 }
@@ -316,7 +354,7 @@ int main(int argc, char **argv) {
       cxxopts::value<int>()->default_value("100"))(
 
       "microBench",
-      "Only query filter. Only valid for false-positive",
+      "Use a mock DB and main-memory operations",
       cxxopts::value<bool>()->default_value("false"))(
 
       "dbStats",
