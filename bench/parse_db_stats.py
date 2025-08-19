@@ -4,7 +4,7 @@ import json
 import pandas as pd
 
 def parse_json_file(path):
-    jsonObj = []
+    jsonObj = {}
     data = ''
     with open(path) as f:
         for l in f.readlines():
@@ -14,7 +14,7 @@ def parse_json_file(path):
         while data:
             value, new_start = decoder.raw_decode(data)
             data = data[new_start:].strip()
-            jsonObj.append(value)
+            jsonObj=value
     return jsonObj
 
 

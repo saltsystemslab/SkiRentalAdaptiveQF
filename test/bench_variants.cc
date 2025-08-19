@@ -44,7 +44,7 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
 
 void write_fp_stats_to_file(std::string output_file_name, std::unordered_map<uint64_t, uint64_t> fp_freq) {
   FILE *fp_stats_file = fopen(output_file_name.c_str(), "w");
-  fprintf(fp_stats_file,"freq,count\n");
+  fprintf(fp_stats_file,"freq count\n");
 
   std::map<uint64_t, uint64_t> freq_dist;
   for (const auto& it: fp_freq) {
