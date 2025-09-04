@@ -28,6 +28,7 @@ int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *query
     while (offset < bytesToWrite) {
       ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
       offset += bytesWritten; 
+      printf("bytes written: %lu\n", bytesWritten);
     }
     close(fd);
   }
@@ -44,6 +45,7 @@ int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *query
     while (offset < bytesToWrite) {
       ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
       offset += bytesWritten; 
+      printf("bytes written: %lu bytesToWrite %lu %lu\n", bytesWritten, offset, bytesToWrite);
     }
     close(fd);
   }
@@ -148,8 +150,20 @@ int main(int argc, char **argv) {
       }
     }
   } else if (queryWorkload == "uniform" || queryWorkload == "adversarial") {
+    printf("Going to generate insertSet\n");
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+
+    uint64_t temp = numQueries;
+    uint64_t offset = 0;
+    uint64_t block_size = 10000000;
+    printf("\n");
+    while (temp > 0) {
+      uint64_t numElements = (temp > block_size) ? block_size : temp;
+      RAND_bytes((unsigned char *)(querySet + offset), numElements * sizeof(uint64_t));
+      offset = offset + numElements;
+      temp = temp - numElements;
+      printf("%lu elements generated\n", offset);
+    }
   } else if (queryWorkload == "normal") {
     uint64_t numUniqueQueries = numQueries/5;
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
@@ -202,7 +216,7 @@ int main(int argc, char **argv) {
   } 
 
   saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
-  saveWorkloadStatsToFile(querySet, numQueries);
+  // saveWorkloadStatsToFile(querySet, numQueries);
 
   return 0;
 }

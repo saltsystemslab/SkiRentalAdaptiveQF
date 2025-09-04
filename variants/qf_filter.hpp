@@ -29,6 +29,7 @@ struct BenchmarkParams {
   bool shouldCollectDbStats;
   uint64_t storageCacheSizeMB;
   uint64_t reverseMapCacheSizeMB;
+  bool shouldSort;
 };
 
 #endif

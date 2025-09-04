@@ -42,10 +42,12 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   fclose(latency_file);
 }
 
-void write_microbench_to_file(std::string output_file_name, uint64_t numTpQueries, uint64_t tpTimeUs, uint64_t numTp, uint64_t numFpQueries, uint64_t fpTimeUs, uint64_t numFp) {
+void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t insertUs, double load_factor, double fpr) {
   FILE *microbench_file = fopen(output_file_name.c_str(), "w");
-  fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numTpQueries, tpTimeUs, (1.0*numTpQueries)/(tpTimeUs));
-  fprintf(microbench_file,"False Queries: %lu\nFalse Queries(us): %lu\nFalse Queries Thput: %lf\n", numFpQueries, fpTimeUs, (1.0*numFpQueries)/(fpTimeUs));
+  fprintf(microbench_file,"Load Factor:%lf\nFPR:%lf\n", load_factor, fpr);
+  fprintf(microbench_file,"NumInserts: %lu\nInsertTime(us): %lu\nInsert Thput:%lf\n", numInserts, insertUs, (1.0*numInserts)/insertUs);
+  fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numInserts, tpTimeUs, (1.0*numQueries)/(tpTimeUs));
+  fprintf(microbench_file,"Queries: %lu\nQueries(us): %lu\nQueries Thput: %lf\n", numQueries, queryTimeUs, (1.0*numQueries)/(queryTimeUs));
   fclose(microbench_file);
 }
 
@@ -74,6 +76,7 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t *querySet = params.querySet;
   uint64_t numQueries = params.numQueries;
   uint64_t numRounds = params.numRounds;
+  bool shouldSort = params.shouldSort;
   std::string output_file = params.output_file + ".csv";
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
@@ -99,9 +102,14 @@ int run_benchmark(BenchmarkParams params) {
     abort();
   }
   fprintf(stderr, "Sorting keys\n");
-  std::sort(insertSet, insertSet + numInserts);
+  if (shouldSort) std::sort(insertSet, insertSet + numInserts);
   fprintf(stderr, "Beginning bulkLoad\n");
+  auto insert_start = std::chrono::high_resolution_clock::now();
   ret = qf.bulkLoad(insertSet, numInserts);
+  auto insert_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> insert_duration =
+        insert_end - insert_start;
+
   if (ret < 0) {
     abort();
   }
@@ -182,7 +190,7 @@ int run_benchmark(BenchmarkParams params) {
           }
 #endif
           if (adaptRetCode == -1) {
-            return -1;
+            continue;
           } else {
             roundAdaptCount += adaptRetCode;
             adaptCount += adaptRetCode;
@@ -237,22 +245,28 @@ int run_benchmark(BenchmarkParams params) {
   db.close();
 
 // Run Microbenchmarks with only in-memory operations at end of the load test
-
-// True queries: Randomly query the insert set.
+{
+// True queries: Query the insert set.
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(insertSet, insertSet + numInserts, g);
   uint64_t numTp = 0;
   auto tp_query_start = std::chrono::high_resolution_clock::now();
   for (uint64_t i=0; i < numInserts; i++) {
       qf.queryFilter(insertSet[i], &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) numTp++;
+    #ifdef CORRECTNESS
       else {
         printf("Key[%lu] not found: %lu\n", i, insertSet[i]);
         abort(); // Should not happen.... This means filter returned false negative.
       }
+    #endif
   }
   auto tp_query_end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::micro> tp_overall_duration =
         tp_query_end - tp_query_start;
 
+  #if 0
 // Negative queries: Query false positives again, but only measure the throughput.
   uint64_t numFp=0;
   auto fp_query_start = std::chrono::high_resolution_clock::now();
@@ -263,9 +277,51 @@ int run_benchmark(BenchmarkParams params) {
   auto fp_query_end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::micro> fp_overall_duration =
         fp_query_end - fp_query_start;
-  std::string micro_file_name = params.output_file + "_micro.csv";
-  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numTp, numQueries, fp_overall_duration.count(), numFp);
+  #endif
+  }
 
+  {
+  // Force the filter to adapt to get it to 95% load factor.
+  #if 0
+  auto fp_query_start = std::chrono::high_resolution_clock::now();
+  for (uint64_t i=0; i < numQueries; i++) {
+      qf.queryFilter(querySet[i], &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present) {
+        qf.adapt(querySet[i], &qfFilterQueryResult);
+      }
+  }
+  #endif
+
+// True queries: Query the insert set.
+  auto tp_query_start = std::chrono::high_resolution_clock::now();
+  for (uint64_t i=0; i < numInserts; i++) {
+      qf.queryFilter(insertSet[i], &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present); 
+    #ifdef CORRECTNESS
+      else {
+        printf("Key[%lu] not found: %lu\n", i, insertSet[i]);
+        abort(); // Should not happen.... This means filter returned false negative.
+      }
+    #endif
+  }
+  auto tp_query_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> tp_overall_duration =
+        tp_query_end - tp_query_start;
+
+// Negative queries: Query false positives again, but only measure the throughput.
+  uint64_t numFp=0;
+  auto fp95_query_start = std::chrono::high_resolution_clock::now();
+  for (uint64_t i=0; i < numQueries; i++) {
+      qf.queryFilter(querySet[i], &qfFilterQueryResult);
+      if (qfFilterQueryResult.key_present) numFp++;
+  }
+  double overall_fpr = (1.0*fpCount) / numQueries;
+  auto fp95_query_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> fp_overall_duration =
+        fp95_query_end - fp95_query_start;
+  std::string micro_file_name = params.output_file + "_summary.csv";
+  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), insert_duration.count(), qf.loadFactor(), overall_fpr);
+  }
   qf.close();
   return 0;
 }
@@ -381,6 +437,7 @@ int main(int argc, char **argv) {
   std::string storageEngine = result["storageEngine"].as<std::string>();
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
+  bool shouldSort = microBench;
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
@@ -396,8 +453,6 @@ int main(int argc, char **argv) {
   qfConfig.rbits = rbits;
   qfConfig.max_load_factor = 0.95;
   qfConfig.breakEvenCount = breakEven;
-
-
 
   {
     int fd = open("insertSet", O_RDWR | O_CREAT, 0644);
@@ -452,6 +507,7 @@ int main(int argc, char **argv) {
   params.shouldCollectDbStats = shouldCollectDbStats;
   params.storageCacheSizeMB = storageCacheSizeMB;
   params.reverseMapCacheSizeMB = reverseMapCacheSizeMB;
+  params.shouldSort = shouldSort;
     
   if (queryWorkload == "adversarial") {
     params.is_adversarial = 1;

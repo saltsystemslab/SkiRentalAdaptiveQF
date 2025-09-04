@@ -90,7 +90,7 @@ public:
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
     if (qf.metadata->noccupied_slots >= fullPoint) {
-      return 0; // Don't have space to adapt more.
+      return -1; // Don't have space to adapt more.
     }
     if (!coin_flip(filterResult->minirun_count)) {
       uint64_t hash = filterResult->hash;

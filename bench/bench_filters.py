@@ -74,12 +74,12 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         print(cmd)
         os.system(cmd)
         ex.add_artifact('%s.csv' % filter)
-        ex.add_artifact('%s_micro.csv' % filter)
+        ex.add_artifact('%s_summary.csv' % filter)
         if capture_extra_stats:
             ex.add_artifact('%s_latency.csv' % filter)
             ex.add_artifact('%s_fp_stats.csv' % filter)
 
-        if collect_db_stats:
+        if collect_db_stats and not microbench:
             #os.system('jq . database_wiredTiger/WiredTigerStat* > %s_db_stats.json' % filter)
             os.system('cp database_wiredTiger/WiredTigerStat* %s_db_stats.json' % filter)
             ex.add_artifact('%s_db_stats.json' % filter)
@@ -87,9 +87,10 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
                 #os.system('jq . reverseMap_wiredTiger/WiredTigerStat* > %s_rm_stats.json' % filter)
                 os.system('cp reverseMap_wiredTiger/WiredTigerStat* %s_rm_stats.json' % filter)
                 ex.add_artifact('%s_rm_stats.json' % filter)
-    os.system('python3 ./bench/parse_db_stats.py .')
-    ex.add_artifact('db_stats.csv')
-    ex.add_artifact('rm_stats.csv')
+    if not microbench:
+        os.system('python3 ./bench/parse_db_stats.py .')
+        ex.add_artifact('db_stats.csv')
+        ex.add_artifact('rm_stats.csv')
 
 @ex.automain
 def run_experiment():
