@@ -2,7 +2,8 @@ from sacred import Experiment
 import os
 
 ex = Experiment()
-filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'rSkiAdaptive', 'coinFlip', 'blockCount']
+filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'repeatDetect']
+#filters = ['repeatDetect']
 
 @ex.config
 def test_config():
@@ -18,12 +19,13 @@ def test_config():
     max_adv_repeat = 0
     break_even = 24
     collect_db_stats=False
-    hash_again_for_zipfian=False
+    hash_again_for_zipfian=True
     capture_extra_stats=False
     storage_cache_size_mb=64
+    zipf_constant=1.2
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, capture_extra_stats, storage_cache_size_mb, _seed):
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, capture_extra_stats, storage_cache_size_mb, _seed, zipf_constant):
     extra_build_flags = ''
     if capture_extra_stats:
         extra_build_flags = ' EXTRA_STATS=1'
@@ -36,12 +38,13 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         '--numRounds': num_rounds,
         '--queryWorkload': query_workload,
         '--seed': _seed,
+        '--zipfianConstant': zipf_constant,
     }
     cmd = "./workload_gen"
     for arg_name in argDict:
         cmd = cmd + (' %s %s' % (arg_name, argDict[arg_name]))
     if hash_again_for_zipfian:
-        cmd = cmd + '--hashAgainForZipfian'
+        cmd = cmd + ' --hashAgainForZipfian'
 
     print(cmd)
     os.system(cmd)

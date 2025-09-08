@@ -6,6 +6,7 @@
 
 #include "cxxopts.hpp"
 #include "dski_adaptive_filter.hpp"
+#include "repeat_detect_adaptive.hpp"
 #include "dummy_backing_store.hpp"
 #include "mono_adaptive_filter.hpp"
 #include "non_adaptive_filter.hpp"
@@ -354,6 +355,10 @@ int run_benchmark_with_storage_engine(
     ret = run_benchmark<DbStorageEngine, BlockCounterAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
+  if (filterType == "repeatDetect") {
+    ret = run_benchmark<DbStorageEngine, RepeatDetectAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
   return ret;
 }
 
@@ -437,7 +442,7 @@ int main(int argc, char **argv) {
   std::string storageEngine = result["storageEngine"].as<std::string>();
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
-  bool shouldSort = microBench;
+  bool shouldSort = !microBench;
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 

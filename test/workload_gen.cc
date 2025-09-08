@@ -98,6 +98,10 @@ int main(int argc, char **argv) {
       "Quotient bits to use in filter",
       cxxopts::value<int>()->default_value("22"))(
 
+      "c,zipfianConstant",
+      "Zipfian Constant",
+      cxxopts::value<float>()->default_value("1.2"))(
+
       "r,remainder",
       "Remainder bits to use in filter",
       cxxopts::value<int>()->default_value("8"))(
@@ -124,6 +128,7 @@ int main(int argc, char **argv) {
   auto result = options.parse(argc, argv);
   int qbits = result["q"].as<int>();
   int rbits = result["r"].as<int>();
+  float zipfConstant = result["c"].as<float>();
   int numRounds = result["numRounds"].as<int>();
   uint64_t randSeed = result["seed"].as<uint64_t>();
   uint64_t numQueries = result["numQueries"].as<uint64_t>();
@@ -135,6 +140,8 @@ int main(int argc, char **argv) {
   uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
   uint64_t *querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
   uint64_t minirun_bitmask = (1ULL << (qbits + rbits)) - 1;
+
+  std::cout<<"Allocated Memory "<<std::endl;
 
 
   if (queryWorkload == "false-positive") {
@@ -205,10 +212,18 @@ int main(int argc, char **argv) {
       querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
     }
   } else if (queryWorkload == "zipfian") {
+    std::cout<<"Generating insert set..."<<std::endl;
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    std::cout<<"Generated insert set!"<<std::endl;
+    std::random_device rd;
+    std::mt19937 gen;
+    std::uniform_int_distribution<uint64_t> dist;
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+    uint64_t upd = numQueries /100;
+    std::cout<<"Generating query set"<<std::endl;
     for (uint64_t i=0; i < numQueries; i++) {
-      querySet[i] = rand_zipfian(1.5f, 1ull << 63, querySet[i]);
+      if (i % upd == 0) std::cout<< i/upd <<" \% done" << std::endl;
+      querySet[i] = rand_zipfian(zipfConstant, 1ull << 63, dist(gen));
       if (hashAgainForZipfian) {
         querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
       }     
