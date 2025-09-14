@@ -2,7 +2,7 @@ from sacred import Experiment
 import os
 
 ex = Experiment()
-filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'repeatDetect']
+filters = ['adaptive', 'nonAdaptive', 'dSkiAdaptive', 'sampleDetect']
 #filters = ['repeatDetect']
 
 @ex.config

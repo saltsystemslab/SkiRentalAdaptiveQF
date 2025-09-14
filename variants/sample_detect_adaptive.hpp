@@ -1,5 +1,5 @@
-#ifndef RD_ADAPTIVE_FILTER
-#define RD_ADAPTIVE_FILTER
+#ifndef SD_ADAPTIVE_FILTER
+#define SD_ADAPTIVE_FILTER
 
 #include "qf_filter.hpp"
 #include <cstddef>
@@ -9,7 +9,7 @@ extern "C" {
 #include "include/test_driver.h"
 }
 
-template <typename ReverseMap> class RepeatDetectAdaptiveFilter {
+template <typename ReverseMap> class SampleDetectAdaptiveFilter {
 public:
   int construct(BenchmarkParams params) {
     benchParams = params;
@@ -28,11 +28,8 @@ public:
     reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB, false, true);
 
     shouldAdaptNow = false;
-    numFpQueries = 0;
-    numUniqueFp = 0;
     numEmptyQueries = 0;
     numCollisions = 0;
-    // usefulAdapts = 0;
     return 0;
   }
 
@@ -70,8 +67,33 @@ public:
     } else {
       result->key_present = 0;
       numEmptyQueries++;
+    }
+    result->hash = hash;
+    result->minirun_rank = minirun_rank;
+    return 0;
+  }
 
-      #if 0
+  int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
+    numEmptyQueries++;
+    int adapted = 0;
+    if (qf.metadata->noccupied_slots >= full_point) {
+      return -1; // Don't have space to adapt more.
+    }
+
+    if (shouldAdaptNow || numEmptyQueries >= sampleThreshold) {
+      if (shouldAdaptNow) {
+        uint64_t origKey;
+        uint64_t fingerprint = filterResult->hash;
+        reverseMap.getFingerprint(
+        fingerprint, filterResult->minirun_rank, &origKey);
+        qf_adapt_using_ll_table(
+            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+        adapted = 1;
+      } else {
+        adapted = 0; // Don't adapt
+      }
+    }
+    else if (numEmptyQueries < sampleThreshold) {
       uint64_t tempKey = queryKey;
       uint64_t bf_hash[4];
       bool isInBf = true;
@@ -81,33 +103,7 @@ public:
         isInBf = isInBf && (bf.test(bf_hash[i]));
       }
       if (isInBf) {
-        usefulAdapts++; // Why is this a useful adapt?
-      }
-      #endif
-    }
-    result->hash = hash;
-    result->minirun_rank = minirun_rank;
-    return 0;
-  }
-
-  int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
-    numFpQueries++;
-    numEmptyQueries++;
-    int adapted = 0;
-    if (qf.metadata->noccupied_slots >= full_point) {
-      return -1; // Don't have space to adapt more.
-    }
-    uint64_t tempKey = queryKey;
-    uint64_t bf_hash[4];
-    bool isInBf = true;
-    for (uint64_t i=0; i<4; i++) {
-      bf_hash[i] = (tempKey) & ((1<<16)-1);
-      tempKey = tempKey >> 16;
-      isInBf = isInBf && (bf.test(bf_hash[i]));
-    }
-
-    // If within a window you find a repeating FP, adapt immediately.
-    if (shouldAdaptNow || isInBf) {
+        numCollisions++;
         uint64_t origKey;
         uint64_t fingerprint = filterResult->hash;
         reverseMap.getFingerprint(
@@ -115,43 +111,14 @@ public:
         qf_adapt_using_ll_table(
             &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
         adapted = 1;
-    } 
-    // If query key already exists, then false positive queries are repeating
-    if (isInBf) {
-      numCollisions++;
-    } else {
-      numUniqueFp++;
-    }
-
-    // Why 6? The BF can handle 3000 inserts at 0.1% FPR
-    // If the query workload is uniform random, you would have 3 collision (expected). Choose 6 to be safe.
-    // After 3000 false positives, numCollisions is reset.
-    if (numCollisions >= 6) {
-      shouldAdaptNow = 1;
-    }
-
-    // Insert query key into bloom filter.
-    for (uint64_t i=0; i<4; i++) {
-      bf.set(bf_hash[i]);
-    }
-
-    // Window size of a million, reset bloom filter.
-    if (numFpQueries > 3209) { 
-      // If the FPR is too high, continue adapting (even though the repeats weren't detected.)
-      if (numEmptyQueries < 880000) {
-        printf("Total: %lu numCollisions: %lu\n", numEmptyQueries, numCollisions);
+      }     
+      if (numCollisions >= bf_FpThreshold) {
         shouldAdaptNow = 1;
       }
-      else if (numCollisions <= 4) {
-        printf("Switching off, Total: %lu numCollisions: %lu\n", numEmptyQueries, numCollisions);
-        shouldAdaptNow = 0;
+      // Insert query key into bloom filter.
+      for (uint64_t i=0; i<4; i++) {
+        bf.set(bf_hash[i]);
       }
-      numUniqueFp = 0;
-      numFpQueries = 0;
-      numCollisions = 0;
-      numEmptyQueries = 0;
-      // usefulAdapts = 0;
-      bf.reset();
     }
     return adapted; // Not adapting.
   }
@@ -173,12 +140,10 @@ private:
   QFilterConfig config;
 
   bool shouldAdaptNow;
-  uint64_t numFpQueries;
   uint64_t numEmptyQueries;
-  uint64_t numUniqueFp;
   uint64_t numCollisions;
-  // uint64_t usefulAdapts;
-  uint64_t bfLimit;
+  uint64_t sampleThreshold=1000000;
+  uint64_t bf_FpThreshold=6;
   std::bitset<65536> bf;
 };
 

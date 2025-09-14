@@ -9,10 +9,25 @@
 #include <random>
 
 #include "cxxopts.hpp"
+#include "cpp_random_distributions/zipfian_int_distribution.h"
 
 extern "C" {
 #include "include/rand_util.h"
 #include "include/hashutil.h"
+}
+
+void printProgressBar(int current, int total, int barWidth = 50) {
+    float progress = (float)current / total;
+    int pos = barWidth * progress;
+    
+    std::cout << "[";
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << "%\r";
+    std::cout.flush();
 }
 
 int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *querySet, uint64_t numQueries) {
@@ -56,7 +71,9 @@ int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
   uint64_t minQuery = -1;
   uint64_t maxQuery = 0;
   std::map<uint64_t, uint64_t> freqMap;
+  printf("Parsing query stats\n");
   for (uint64_t i=0; i <numQueries; i++) {
+    if (i%1000000==0) printProgressBar(i, numQueries);
     freqMap[querySet[i]]++;
     minQuery = std::min(minQuery, querySet[i]);
     maxQuery = std::max(maxQuery, querySet[i]);
@@ -220,10 +237,14 @@ int main(int argc, char **argv) {
     std::uniform_int_distribution<uint64_t> dist;
     RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
     uint64_t upd = numQueries /100;
+
     std::cout<<"Generating query set"<<std::endl;
+    std::default_random_engine generator;
+    zipfian_int_distribution<uint64_t> distribution((uint64_t)0, numQueries, zipfConstant);
+
     for (uint64_t i=0; i < numQueries; i++) {
-      if (i % upd == 0) std::cout<< i/upd <<" \% done" << std::endl;
-      querySet[i] = rand_zipfian(zipfConstant, 1ull << 63, dist(gen));
+      if (i % 1000000 == 0) printProgressBar(i, numQueries);
+      querySet[i] = distribution(generator);
       if (hashAgainForZipfian) {
         querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
       }     
@@ -231,7 +252,7 @@ int main(int argc, char **argv) {
   } 
 
   saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
-  // saveWorkloadStatsToFile(querySet, numQueries);
+  saveWorkloadStatsToFile(querySet, numQueries);
 
   return 0;
 }

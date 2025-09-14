@@ -7,6 +7,7 @@
 #include "cxxopts.hpp"
 #include "dski_adaptive_filter.hpp"
 #include "repeat_detect_adaptive.hpp"
+#include "sample_detect_adaptive.hpp"
 #include "dummy_backing_store.hpp"
 #include "mono_adaptive_filter.hpp"
 #include "non_adaptive_filter.hpp"
@@ -16,6 +17,20 @@
 #include "coin_flip_adaptive.hpp"
 #include "block_counter_adaptive.hpp"
 #include "wiredtiger_backing_store.hpp"
+
+void printProgressBar(int current, int total, int barWidth = 50) {
+    float progress = (float)current / total;
+    int pos = barWidth * progress;
+    
+    std::cout << "[";
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << "%\r";
+    std::cout.flush();
+}
 
 void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t> fp_miss_latencies, std::vector<uint64_t> adapt_latencies) {
   sort(fp_miss_latencies.begin(), fp_miss_latencies.end());
@@ -118,6 +133,7 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(stderr, "Loading database\n");
   db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, false /*collectStats*/, true /* clear OldDB*/);
   for (uint64_t i = 0; i < numInserts; i++) {
+    if (i % 1000000 == 0)printProgressBar(i, numInserts);
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
   db.close();
@@ -244,6 +260,7 @@ int run_benchmark(BenchmarkParams params) {
   write_fp_stats_to_file(fp_stats_file.c_str(), fp_freq);
 #endif
   db.close();
+  printf("Done with the test\n");
 
 // Run Microbenchmarks with only in-memory operations at end of the load test
 {
@@ -254,6 +271,7 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t numTp = 0;
   auto tp_query_start = std::chrono::high_resolution_clock::now();
   for (uint64_t i=0; i < numInserts; i++) {
+      if (i%1000000==0)printProgressBar(i, numInserts);
       qf.queryFilter(insertSet[i], &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) numTp++;
     #ifdef CORRECTNESS
@@ -296,6 +314,7 @@ int run_benchmark(BenchmarkParams params) {
 // True queries: Query the insert set.
   auto tp_query_start = std::chrono::high_resolution_clock::now();
   for (uint64_t i=0; i < numInserts; i++) {
+      if (i%1000000==0)printProgressBar(i, numInserts);
       qf.queryFilter(insertSet[i], &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present); 
     #ifdef CORRECTNESS
@@ -357,6 +376,10 @@ int run_benchmark_with_storage_engine(
   }
   if (filterType == "repeatDetect") {
     ret = run_benchmark<DbStorageEngine, RepeatDetectAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
+  if (filterType == "sampleDetect") {
+    ret = run_benchmark<DbStorageEngine, SampleDetectAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
   return ret;
