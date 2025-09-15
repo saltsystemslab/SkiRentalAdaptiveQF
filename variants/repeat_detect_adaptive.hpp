@@ -165,6 +165,10 @@ public:
     return 0;
   }
 
+  uint64_t sizeInBytes() {
+    return qf.metadata->total_size_in_bytes + bf.size()/8 + sizeof(uint64_t) * 5;
+  }
+
 private:
   QF qf;
   ReverseMap reverseMap;

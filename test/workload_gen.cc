@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
   } 
 
   saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
-  saveWorkloadStatsToFile(querySet, numQueries);
+  // saveWorkloadStatsToFile(querySet, numQueries);
 
   return 0;
 }

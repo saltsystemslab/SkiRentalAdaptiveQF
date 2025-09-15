@@ -127,6 +127,10 @@ public:
     return (double)qf.metadata->noccupied_slots / qf.metadata->nslots;
   }
 
+  uint64_t sizeInBytes() {
+    return qf.metadata->total_size_in_bytes + bf.size()/8 + sizeof(uint64_t) * 5;
+  }
+
   int close() {
     reverseMap.close();
     return 0;

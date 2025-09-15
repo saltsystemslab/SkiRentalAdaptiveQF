@@ -68,7 +68,9 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
         '--breakEven': break_even,
     }
     for filter in filters:
-        if filter == 'blockCount':
+        if filter == 'nonAdaptive':
+            os.system('make clean && make bench_variants USE_CQF=1' + extra_build_flags)
+        elif filter == 'blockCount':
             os.system('make clean && make bench_variants SEVEN_BIT_OFFSET=1' + extra_build_flags)
         else:
             os.system('make clean && make bench_variants' + extra_build_flags)

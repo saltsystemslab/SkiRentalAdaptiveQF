@@ -113,6 +113,10 @@ public:
     return 0;
   }
 
+  uint64_t sizeInBytes() {
+    return qf.metadata->total_size_in_bytes;
+  }
+
 private:
   bool coin_flip() {
     double flip = dis2(gen2);

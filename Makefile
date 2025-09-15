@@ -29,7 +29,7 @@ LOC_INCLUDE=include
 LOC_SRC=src
 LOC_TEST=test
 OBJDIR=obj
-
+CQFDIR=other_filters/cqf/obj
 CC = gcc -std=gnu11
 CXX = g++ -std=c++17
 LD= gcc -std=gnu11
@@ -38,6 +38,12 @@ CXXFLAGS = -Wall $(DEBUG) $(PROFILE) $(OPT) $(ARCH) -m64 -I. -Iinclude -Iexterna
 
 LDFLAGS = $(DEBUG) $(PROFILE) $(OPT) -lpthread -lssl -lcrypto -lm -L$(SPLINTERPATH) -L$(WTPATH) -lsplinterdb -lwiredtiger -Wl,-rpath=$(SPLINTERPATH):$(WTPATH)
 #LDFLAGS += -L/usr/lib/ -lstxxl
+
+ifdef USE_CQF
+	CXXFLAGS += -DUSE_CQF
+else
+endif
+
 
 ifdef SEVEN_BIT_OFFSET
 		CXXFLAGS += -DSEVEN_BIT_OFFSET
@@ -67,9 +73,15 @@ test_throughput_nonAdaptive:			$(OBJDIR)/test_throughput_nonAdaptive.o $(OBJDIR)
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
 
+ifdef USE_CQF
+bench_variants:			$(OBJDIR)/bench_variants.o $(CQFDIR)/gqf.o $(CQFDIR)/gqf_file.o \
+										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o  \
+										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+else
 bench_variants:			$(OBJDIR)/bench_variants.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
 										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+endif
 
 workload_gen:			$(OBJDIR)/workload_gen.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
 										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \

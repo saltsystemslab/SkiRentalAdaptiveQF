@@ -3,19 +3,26 @@
 #include <stdio.h>
 #include <algorithm>
 #include <queue>
+#include <random>
 
 #include "cxxopts.hpp"
+#include "qf_filter.hpp"
+
+#if USE_CQF
+#include "non_adaptive_filter.hpp"
+#else
 #include "dski_adaptive_filter.hpp"
 #include "repeat_detect_adaptive.hpp"
 #include "sample_detect_adaptive.hpp"
-#include "dummy_backing_store.hpp"
 #include "mono_adaptive_filter.hpp"
-#include "non_adaptive_filter.hpp"
-#include "qf_filter.hpp"
 #include "rski_adaptive_filter.hpp"
-#include "splinter_backing_store.hpp"
 #include "coin_flip_adaptive.hpp"
+#include "non_adaptive_filter.hpp"
 #include "block_counter_adaptive.hpp"
+#endif
+
+#include "splinter_backing_store.hpp"
+#include "dummy_backing_store.hpp"
 #include "wiredtiger_backing_store.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
@@ -58,12 +65,13 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   fclose(latency_file);
 }
 
-void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t insertUs, double load_factor, double fpr) {
+void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t insertUs, double load_factor, double fpr, uint64_t sizeBytes) {
   FILE *microbench_file = fopen(output_file_name.c_str(), "w");
   fprintf(microbench_file,"Load Factor:%lf\nFPR:%lf\n", load_factor, fpr);
   fprintf(microbench_file,"NumInserts: %lu\nInsertTime(us): %lu\nInsert Thput:%lf\n", numInserts, insertUs, (1.0*numInserts)/insertUs);
   fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numInserts, tpTimeUs, (1.0*numQueries)/(tpTimeUs));
   fprintf(microbench_file,"Queries: %lu\nQueries(us): %lu\nQueries Thput: %lf\n", numQueries, queryTimeUs, (1.0*numQueries)/(queryTimeUs));
+  fprintf(microbench_file,"Size(B): %lu Size(MB): %lf\n", sizeBytes, sizeBytes/(1024.0 * 1024.0));;
   fclose(microbench_file);
 }
 
@@ -340,7 +348,7 @@ int run_benchmark(BenchmarkParams params) {
   std::chrono::duration<double, std::micro> fp_overall_duration =
         fp95_query_end - fp95_query_start;
   std::string micro_file_name = params.output_file + "_summary.csv";
-  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), insert_duration.count(), qf.loadFactor(), overall_fpr);
+  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), insert_duration.count(), qf.loadFactor(), overall_fpr, qf.sizeInBytes());
   }
   qf.close();
   return 0;
@@ -350,13 +358,18 @@ template <typename DbStorageEngine, typename ReverseMapEngine>
 int run_benchmark_with_storage_engine(
     std::string filterType, BenchmarkParams params) {
   int ret = -1;
+  #if USE_CQF
+  if (filterType == "nonAdaptive") {
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
+  }
+  #else
+  if (filterType == "nonAdaptive") {
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
+  }
   if (filterType == "adaptive") {
     ret = run_benchmark<
         DbStorageEngine,
         MonotonicAdaptiveFilter<ReverseMapEngine>>(params);
-  }
-  if (filterType == "nonAdaptive") {
-    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
   }
   if (filterType == "dSkiAdaptive") {
     ret = run_benchmark<DbStorageEngine, DSkiAdaptiveFilter<ReverseMapEngine>>(
@@ -382,6 +395,7 @@ int run_benchmark_with_storage_engine(
     ret = run_benchmark<DbStorageEngine, SampleDetectAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
+  #endif
   return ret;
 }
 

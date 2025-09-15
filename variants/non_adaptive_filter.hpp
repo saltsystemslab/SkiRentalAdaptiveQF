@@ -5,7 +5,11 @@
 #include <cstddef>
 
 extern "C" {
+#if USE_CQF
+#include "other_filters/cqf/include/gqf.h"
+#else
 #include "include/gqf.h"
+#endif
 #include "include/test_driver.h"
 }
 
@@ -31,9 +35,14 @@ public:
   int bulkLoad(uint64_t *keys, uint64_t numKeys) {
     int count = 1;
     for (uint64_t i = 0; i < numKeys; i++) {
+      #if USE_CQF
+      int ret = qf_insert(
+          &qf, keys[i], 0, count, QF_NO_LOCK | QF_KEY_IS_HASH);
+      #else
       qf_insert_result result;
       int ret = qf_insert_using_ll_table(
           &qf, keys[i], count, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
+      #endif
       if (ret < 0) {
         return -1;
       }
@@ -44,6 +53,12 @@ public:
   int queryFilter(uint64_t queryKey, QFilterQueryResult *result) {
     int minirun_rank;
     uint64_t hash;
+    #if USE_CQF
+    uint64_t value;
+    result->key_present = qf_query(&qf, queryKey, &value, QF_NO_LOCK | QF_KEY_IS_HASH);
+    result->hash = 0;
+    result->minirun_rank = 0;
+    #else
     if ((minirun_rank = qf_query_using_ll_table(
              &qf, queryKey, &hash, QF_KEY_IS_HASH)) >= 0) {
       result->key_present = 1;
@@ -52,6 +67,7 @@ public:
     }
     result->hash = hash;
     result->minirun_rank = minirun_rank;
+    #endif
     return 0;
   }
 
@@ -66,6 +82,10 @@ public:
 
   int close() {
     return 0;
+  }
+
+  uint64_t sizeInBytes() {
+    return qf.metadata->total_size_in_bytes;
   }
 
 private:

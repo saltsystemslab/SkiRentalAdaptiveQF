@@ -64,6 +64,9 @@ int db_insert(splinterdb *database, const void *key_data, const size_t key_len, 
 }
 
 int qf_splinter_insert(QF *qf, splinterdb *db, uint64_t key, int count) {
+	#if USE_CQF
+	abort();
+	#else
 	qf_insert_result result;
 	int ret = qf_insert_using_ll_table(qf, key, count, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
 	if (ret < 0) {
@@ -79,9 +82,13 @@ int qf_splinter_insert(QF *qf, splinterdb *db, uint64_t key, int count) {
 		//if (!db_insert(db, &result.minirun_id, sizeof(result.minirun_id), &key, sizeof(key), result.minirun_existed, 0)) return result.minirun_existed + 1;
 		return 0;
 	}
+	#endif
 }
 
 int qf_splinter_insert_split(QF *qf, splinterdb *db, splinterdb *bm, uint64_t key, uint64_t count) {
+	#if USE_CQF
+	abort();
+	#else
 	qf_insert_result result;
 	int ret = qf_insert_using_ll_table(qf, key, count, &result, QF_NO_LOCK | QF_KEY_IS_HASH);
 	if (ret < 0) {
@@ -94,4 +101,5 @@ int qf_splinter_insert_split(QF *qf, splinterdb *db, splinterdb *bm, uint64_t ke
 		if (db_insert(bm, &result.minirun_id, sizeof(result.minirun_id), &key, sizeof(key), result.minirun_existed, 0)) return 0;
 		return result.minirun_existed + 1;
 	}
+	#endif
 }
