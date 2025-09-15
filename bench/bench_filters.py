@@ -23,9 +23,10 @@ def test_config():
     capture_extra_stats=False
     storage_cache_size_mb=64
     zipf_constant=1.2
+    workload_only=False
 
 @ex.capture
-def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, capture_extra_stats, storage_cache_size_mb, _seed, zipf_constant):
+def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, microbench,storage_engine, reverse_map_engine, query_workload, adv_freq, max_adv_repeat, break_even, collect_db_stats, hash_again_for_zipfian, capture_extra_stats, storage_cache_size_mb, _seed, zipf_constant, workload_only):
     extra_build_flags = ''
     if capture_extra_stats:
         extra_build_flags = ' EXTRA_STATS=1'
@@ -49,6 +50,10 @@ def run_filter_bench(quotient_bits, remainder_bits, num_queries, num_rounds, mic
     print(cmd)
     os.system(cmd)
     ex.add_artifact('queryStats')
+    ex.add_artifact('rankFreq')
+
+    if (workload_only):
+        return
 
     argDict = {
         '-q': quotient_bits,

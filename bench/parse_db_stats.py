@@ -21,7 +21,7 @@ def parse_json_file(path):
 
 testDir = sys.argv[1]
 
-filters = ['adaptive', 'rSkiAdaptive', 'dSkiAdaptive', 'nonAdaptive', 'coinFlip', 'blockCount']
+filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect']
 db_stats = {}
 db_stats_summary = []
 for filter in filters:
@@ -40,7 +40,7 @@ stats_summary = pd.DataFrame(db_stats_summary)
 stats_summary.to_csv('db_stats.csv')
 print(stats_summary)
 
-filters = ['adaptive', 'rSkiAdaptive', 'dSkiAdaptive', 'coinFlip', 'blockCount']
+filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect']
 rm_stats = {}
 rm_stats_summary = []
 for filter in filters:

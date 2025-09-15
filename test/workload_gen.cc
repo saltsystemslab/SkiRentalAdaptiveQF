@@ -79,9 +79,11 @@ int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
     maxQuery = std::max(maxQuery, querySet[i]);
   }
   std::vector<std::pair<uint64_t, uint64_t>> distMap;
+  std::vector<uint64_t> freq;
   auto it = freqMap.begin();
   while (it != freqMap.end()) {
     distMap.push_back(std::pair<uint64_t, uint64_t>(it->second, it->first));
+    freq.push_back(it->second);
     it++;
   }
   sort(distMap.begin(), distMap.end());
@@ -100,6 +102,24 @@ int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
     }
     fclose(fd);
   }
+  {
+    sort(freq.begin(), freq.end());
+    FILE *fd = fopen("rankFreq", "w");
+    fprintf(fd, "rank freq\n");
+
+    uint64_t numPoints = 300;
+    uint64_t skip = freq.size() / 300;
+    for (uint64_t i=0; i < freq.size(); i+=skip) {
+      fprintf(fd, "%lu %lu\n", i+1, freq[i]);
+      if (i >= freq.size() - 300) break;
+    }
+    for (uint64_t i=freq.size()-300; i < freq.size(); i++) {
+      fprintf(fd, "%lu %lu\n", i+1, freq[i]);
+    }
+    fprintf(fd, "%lu %lu\n", freq.size(), freq[freq.size()-1]);
+    fclose(fd);
+  }
+
   return 0;
 }
 
