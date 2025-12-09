@@ -3,7 +3,7 @@
 This repository extends the Adaptive Quotient Filter (AQF) to adapt only if a false positive exceeds a threshold.
 The threshold is determined by applying a ski-rental analysis on the false-positive detection (renting) and adaptation (buying) costs.  
 
-The code is provided in two variants
+The filters are provided in two variants
 
 * SkiQF (variants/dski_adaptive.hpp)
 * SampledSkiQF(variants/sample_detect_adaptive.hpp)
@@ -17,7 +17,7 @@ For code-samples on how to use the filters, please refer to `test/bench_variants
 Experiments
 -------
 
-The experiments run in our paper can be triggered by the running the test script
+The experiments run in our paper can be triggered by the running the test script.
 
 ```bash
  $ ./run_tests
