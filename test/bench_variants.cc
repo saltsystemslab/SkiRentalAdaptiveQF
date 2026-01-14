@@ -105,6 +105,12 @@ int run_benchmark(BenchmarkParams params) {
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
 
+  int isPhasedTest = params.isPhasedTest;
+  bool startWithAdversarialPhase = params.startWithAdversarialPhase;
+  int numPhases = params.numPhases;
+  int num_rounds_per_phase = numRounds / numPhases;
+
+
 #ifdef PERF
   double sampleRate = 0.9;
   uint64_t sampleThreshold = INT_MAX * sampleRate;
@@ -157,8 +163,21 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t cur_adv_query = 0;
   uint64_t adv_query_size = 0;
 
+  if (isPhasedTest && startWithAdversarialPhase) {
+    is_adversarial = 0; // Round 0 will switch it to adversarial
+  } else if (isPhasedTest) {
+    is_adversarial = 1;
+  }
+
   auto bench_start = std::chrono::high_resolution_clock::now();
   for (uint32_t r = 0; r < numRounds; r++) {
+    if (isPhasedTest) {
+      if (r % num_rounds_per_phase == 0) {
+        is_adversarial = 1 - is_adversarial;
+        printf("Round %d is_adversarial: %d\n", r, is_adversarial);
+      }
+    }
+
     auto round_start = std::chrono::high_resolution_clock::now();
     uint64_t roundFpCount = 0;
     uint64_t roundAdaptCount = 0;
@@ -179,7 +198,7 @@ int run_benchmark(BenchmarkParams params) {
 #endif
       qf.queryFilter(queryKey, &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
-        if (is_adversarial && queryIdx % adversarial_freq != 0) {
+        if ((is_adversarial || isPhasedTest) && queryIdx % adversarial_freq != 0) {
           adv_queries[adv_query_size] = queryKey;
           adv_query_size++;
         }
@@ -420,7 +439,7 @@ int main(int argc, char **argv) {
       cxxopts::value<int>()->default_value("5"))(
 
       "queryWorkload",
-      "uniform, false-positive, zipfian, adversarial",
+      "uniform, false-positive, zipfian, adversarial,cyclic",
       cxxopts::value<std::string>()->default_value("false-positive"))(
 
       "filter",
@@ -461,7 +480,19 @@ int main(int argc, char **argv) {
 
       "advFreq",
       "adversarialFreq",
-      cxxopts::value<int>()->default_value("5"));
+      cxxopts::value<int>()->default_value("5"))(
+
+      "phasedTest",
+      "Run phased test that alternates between adversarial and workload mode",
+      cxxopts::value<bool>()->default_value("false"))(
+
+      "startWithAdversarialPhase",
+      "Starts with Adversarial phase in phased test",
+      cxxopts::value<bool>()->default_value("false"))(
+
+      "numPhases",
+      "Number of adversarial phase switches in Cyclic test",
+      cxxopts::value<int>()->default_value("1"));
 
 
   auto result = options.parse(argc, argv);
@@ -481,13 +512,18 @@ int main(int argc, char **argv) {
   bool microBench = result["microBench"].as<bool>();
   bool shouldSort = !microBench;
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
+  bool isPhasedTest = result["phasedTest"].as<bool>();
+  bool startWithAdversarialPhase = result["startWithAdversarialPhase"].as<bool>();
+  int numPhases = result["numPhases"].as<int>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
   uint64_t *querySet;
 
 
   std::cout << "Testing filter: " << filterType
-            << " with workload: " << queryWorkload << std::endl;
+            << " with workload: " << queryWorkload 
+            << " startWithAdversarialPhase: " << startWithAdversarialPhase
+            << std::endl;
 
   uint64_t minirun_bitmask = (1ULL << qbits + rbits) - 1;
   QFilterConfig qfConfig;
@@ -550,10 +586,15 @@ int main(int argc, char **argv) {
   params.storageCacheSizeMB = storageCacheSizeMB;
   params.reverseMapCacheSizeMB = reverseMapCacheSizeMB;
   params.shouldSort = shouldSort;
-    
+  params.isPhasedTest  = isPhasedTest;
+  params.numPhases = numPhases;
+  params.startWithAdversarialPhase = startWithAdversarialPhase;
+
+  
   if (queryWorkload == "adversarial") {
     params.is_adversarial = 1;
   }
+  // For cyclic workloads, the benchmark will handle dynamically changing is_adversarial.
 
   int ret = -1;
   if (microBench) {
