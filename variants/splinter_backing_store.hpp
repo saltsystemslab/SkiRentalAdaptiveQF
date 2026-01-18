@@ -16,9 +16,14 @@ public:
     
     if (clearOld) {
       remove(splinterdb_cfg.filename);
-    }
-    if (splinterdb_create(&splinterdb_cfg, &db)) {
-      return -1;
+      if (splinterdb_create(&splinterdb_cfg, &db)) {
+        return -1;
+      }
+    } else {
+      splinterdb_close(&db);
+      if (splinterdb_open(&splinterdb_cfg, &db)) {
+        return -1;
+      }
     }
     splinterdb_lookup_result_init(db, &db_result, 0, NULL);
     this->quotient_remainder_bits = quotient_remainder_bits;
@@ -78,7 +83,9 @@ public:
   }
 
   int close() { return 0; }
-  void commitFingerprints() {}
+  void commitFingerprints() {
+    // SplinterDB uses write-buffering, so no need for bulk commit.
+  }
 
 private:
   data_config data_cfg;
