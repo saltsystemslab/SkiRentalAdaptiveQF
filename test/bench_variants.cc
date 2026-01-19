@@ -25,6 +25,7 @@
 #include "dummy_backing_store.hpp"
 #include "wiredtiger_backing_store.hpp"
 #include "wiredtiger_reverse_map.hpp"
+#include "wiredtiger_reverse_map_lsm.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
     float progress = (float)current / total;
@@ -459,7 +460,7 @@ int main(int argc, char **argv) {
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
       "reverseMapEngine",
-      "splinterDB, wiredTiger",
+      "splinterDB, wiredTiger,wiredTigerLsm",
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
       "storageCacheSizeMB",
@@ -631,6 +632,11 @@ int main(int argc, char **argv) {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
         WiredTigerReverseMap>(filterType, params);
+  } else if (
+      storageEngine == "wiredTiger" && reverseMapEngine == "wiredTigerLsm") {
+    ret = run_benchmark_with_storage_engine<
+        WiredTigerBackingStore,
+        WiredTigerReverseMapLsm>(filterType, params);
   } else if (
       storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
