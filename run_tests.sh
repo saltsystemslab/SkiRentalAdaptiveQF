@@ -1,24 +1,11 @@
 #!/bin/bash
 
-# Small-tests
- python3 ./bench/bench_filters.py  -F paper-small/uniform-phased-adv-first with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=False is_phased_test=True num_phases=2 start_with_adversarial_phase=True
- python3 ./bench/bench_filters.py  -F paper-small/uniform-phased with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=False is_phased_test=True num_phases=2 start_with_adversarial_phase=False
-
-python3 ./bench/bench_filters.py  -F paper-small/insert with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=True is_insert_test=True
-python3 ./bench/bench_filters.py  -F paper-small/insert with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=False is_insert_test=True
-python3 ./bench/bench_filters.py  -F paper-small/insert with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=splinterDB query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=True is_insert_test=True
-python3 ./bench/bench_filters.py  -F paper-small/insert with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=splinterDB query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=False is_insert_test=True
-
-exit
-
 # Large-tests
- python3 ./bench/bench_filters.py  -F paper/uniform-phased-adv-first with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=2 start_with_adversarial_phase=True
- python3 ./bench/bench_filters.py  -F paper/uniform-phased with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=2 start_with_adversarial_phase=False
+ python3 ./bench/bench_filters.py  -F paper/uniform-phased-adv-first with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=4 start_with_adversarial_phase=True
+ python3 ./bench/bench_filters.py  -F paper/uniform-phased with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=4 start_with_adversarial_phase=False
 
 python3 ./bench/bench_filters.py  -F paper/insert with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=27 capture_extra_stats=True sort_and_insert_keys=True is_insert_test=True
 python3 ./bench/bench_filters.py  -F paper/insert with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=27 capture_extra_stats=True sort_and_insert_keys=False is_insert_test=True
-python3 ./bench/bench_filters.py  -F paper/insert with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=splinterDB query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=27 capture_extra_stats=True sort_and_insert_keys=True is_insert_test=True
-python3 ./bench/bench_filters.py  -F paper/insert with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=splinterDB query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=27 capture_extra_stats=True sort_and_insert_keys=False is_insert_test=True
 
 exit
 
