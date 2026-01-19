@@ -24,6 +24,7 @@
 #include "splinter_backing_store.hpp"
 #include "dummy_backing_store.hpp"
 #include "wiredtiger_backing_store.hpp"
+#include "wiredtiger_reverse_map.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
     float progress = (float)current / total;
@@ -65,10 +66,11 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   fclose(latency_file);
 }
 
-void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t insertUs, double load_factor, double fpr, uint64_t sizeBytes) {
+void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t filterInsertUs, uint64_t systemInsertUs, double load_factor, double fpr, uint64_t sizeBytes) {
   FILE *microbench_file = fopen(output_file_name.c_str(), "w");
   fprintf(microbench_file,"Load Factor:%lf\nFPR:%lf\n", load_factor, fpr);
-  fprintf(microbench_file,"NumInserts: %lu\nInsertTime(us): %lu\nInsert Thput:%lf\n", numInserts, insertUs, (1.0*numInserts)/insertUs);
+  fprintf(microbench_file,"NumInserts: %lu\nFilterInsertTime(us): %lu\nFilterInsert Thput:%lf\n", numInserts, filterInsertUs, (1.0*numInserts)/filterInsertUs);
+  fprintf(microbench_file,"SystemInsertTime(us): %lu\nSystemInsert Thput:%lf\n", systemInsertUs, (1.0*numInserts)/systemInsertUs);
   fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numInserts, tpTimeUs, (1.0*numQueries)/(tpTimeUs));
   fprintf(microbench_file,"Queries: %lu\nQueries(us): %lu\nQueries Thput: %lf\n", numQueries, queryTimeUs, (1.0*numQueries)/(queryTimeUs));
   fprintf(microbench_file,"Size(B): %lu Size(MB): %lf\n", sizeBytes, sizeBytes/(1024.0 * 1024.0));;
@@ -104,6 +106,7 @@ int run_benchmark(BenchmarkParams params) {
   std::string output_file = params.output_file + ".csv";
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
+  bool sortAndInsertFingerprints = params.sortAndInsertFingerprints;
 
   int isPhasedTest = params.isPhasedTest;
   bool startWithAdversarialPhase = params.startWithAdversarialPhase;
@@ -134,11 +137,12 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(stderr, "Sorting keys\n");
   if (shouldSort) std::sort(insertSet, insertSet + numInserts);
   fprintf(stderr, "Beginning bulkLoad\n");
-  auto insert_start = std::chrono::high_resolution_clock::now();
-  ret = qf.bulkLoad(insertSet, numInserts);
-  auto insert_end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::micro> insert_duration =
-        insert_end - insert_start;
+  auto filter_insert_start = std::chrono::high_resolution_clock::now();
+  auto system_insert_start = std::chrono::high_resolution_clock::now();
+  ret = qf.bulkLoad(insertSet, numInserts );
+  auto filter_insert_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> filter_insert_duration =
+        filter_insert_end - filter_insert_start;
 
   if (ret < 0) {
     abort();
@@ -151,6 +155,10 @@ int run_benchmark(BenchmarkParams params) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
   db.close();
+  auto system_insert_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> system_insert_duration =
+        system_insert_end - system_insert_start;
+
   fprintf(stderr, "Done. starting test\n");
   db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/);
 
@@ -367,7 +375,7 @@ int run_benchmark(BenchmarkParams params) {
   std::chrono::duration<double, std::micro> fp_overall_duration =
         fp95_query_end - fp95_query_start;
   std::string micro_file_name = params.output_file + "_summary.csv";
-  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), insert_duration.count(), qf.loadFactor(), overall_fpr, qf.sizeInBytes());
+  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), filter_insert_duration.count(), system_insert_duration.count(), qf.loadFactor(), overall_fpr, qf.sizeInBytes());
   }
   qf.close();
   return 0;
@@ -474,6 +482,10 @@ int main(int argc, char **argv) {
       "Use a mock DB and main-memory operations",
       cxxopts::value<bool>()->default_value("false"))(
 
+      "sortAndInsertFingerprints",
+      "Sort all fingerprints before inserting into reverse map, speeds up wiredTiger as reverse map creation",
+      cxxopts::value<bool>()->default_value("true"))(
+
       "dbStats",
       "Collect DB Stats (WiredTiger)",
       cxxopts::value<bool>()->default_value("false"))(
@@ -510,6 +522,7 @@ int main(int argc, char **argv) {
   std::string storageEngine = result["storageEngine"].as<std::string>();
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
+  bool sortAndInsertFingerprints = result["sortAndInsertFingerprints"].as<bool>();
   bool shouldSort = !microBench;
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
   bool isPhasedTest = result["phasedTest"].as<bool>();
@@ -522,7 +535,8 @@ int main(int argc, char **argv) {
 
   std::cout << "Testing filter: " << filterType
             << " with workload: " << queryWorkload 
-            << " startWithAdversarialPhase: " << startWithAdversarialPhase
+            << " startWithAdversarialPhase " << startWithAdversarialPhase
+            << " sortAndInsertFingerprints " << sortAndInsertFingerprints
             << std::endl;
 
   uint64_t minirun_bitmask = (1ULL << qbits + rbits) - 1;
@@ -589,6 +603,7 @@ int main(int argc, char **argv) {
   params.isPhasedTest  = isPhasedTest;
   params.numPhases = numPhases;
   params.startWithAdversarialPhase = startWithAdversarialPhase;
+  params.sortAndInsertFingerprints = sortAndInsertFingerprints;
 
   
   if (queryWorkload == "adversarial") {
@@ -605,7 +620,7 @@ int main(int argc, char **argv) {
       storageEngine == "splinterDB" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         SplinterDBBackingStore,
-        WiredTigerBackingStore>(filterType, params);
+        WiredTigerReverseMap>(filterType, params);
   } else if (
       storageEngine == "splinterDB" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
@@ -615,7 +630,7 @@ int main(int argc, char **argv) {
       storageEngine == "wiredTiger" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
-        WiredTigerBackingStore>(filterType, params);
+        WiredTigerReverseMap>(filterType, params);
   } else if (
       storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<

@@ -4,7 +4,7 @@ import os
 import subprocess
 
 ex = Experiment()
-filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect"]
+all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect"]
 # filters = ['repeatDetect']
 
 
@@ -30,6 +30,8 @@ def test_config():
     is_phased_test = False
     num_phases = 2
     start_with_adversarial_phase = False
+    is_insert_test = False
+    sort_and_insert_keys=True
 
 
 @ex.capture
@@ -54,8 +56,16 @@ def run_filter_bench(
     workload_only,
     is_phased_test,
     num_phases,
-    start_with_adversarial_phase
+    start_with_adversarial_phase,
+    sort_and_insert_keys,
+    is_insert_test
 ):
+    filters = all_filters
+    if is_insert_test:
+        filters=['adaptive', 'nonAdaptive']
+
+    print(filters)
+
     extra_build_flags = ""
     if capture_extra_stats:
         extra_build_flags = " EXTRA_STATS=1"
@@ -113,8 +123,11 @@ def run_filter_bench(
         log_file = filter + "_build.log"
         if filter == "nonAdaptive":
             build_cmd = (
-                "make clean && make bench_variants USE_CQF=1" + extra_build_flags
+                "make clean && make bench_variants" + extra_build_flags
             )
+            #build_cmd = (
+            #    "make clean && make bench_variants USE_CQF=1" + extra_build_flags
+            #)
         elif filter == "blockCount":
             build_cmd = (
                 "make clean && make bench_variants SEVEN_BIT_OFFSET=1"
@@ -160,6 +173,8 @@ def run_filter_bench(
             cmd = cmd + " --phasedTest"
         if start_with_adversarial_phase:
             cmd = cmd + " --startWithAdversarialPhase"
+        if sort_and_insert_keys:
+            cmd = cmd + " --sortAndInsertFingerprints"
 
         with tqdm(
             desc="\nRunning benchmark for " + filter + "\n" + cmd,
@@ -177,7 +192,6 @@ def run_filter_bench(
             ex.add_artifact("%s_fp_stats.csv" % filter)
 
         ### Copying DB Stats
-
         if collect_db_stats and not microbench:
             with tqdm(
                 desc="\nCopying DB Stats for " + filter,
@@ -187,7 +201,7 @@ def run_filter_bench(
                 ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
             ex.add_artifact("%s_db_stats.json" % filter)
 
-            if filter != "nonAdaptive":
+            if reverse_map_engine == "wiredTiger" and filter != "nonAdaptive":
                 with tqdm(
                     desc="\nCopying DB Stats for " + filter,
                     bar_format="{desc}\nElapsed:{elapsed}",

@@ -1,7 +1,15 @@
 #!/bin/bash
 
-python3 ./bench/bench_filters.py  -F phased-test-runs/uniform with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=True is_phased_test=True num_phases=2 start_with_adversarial_phase=True
-python3 ./bench/bench_filters.py  -F phased-test-runs/uniform with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=True is_phased_test=True num_phases=2 start_with_adversarial_phase=False
+python3 ./bench/bench_filters.py  -F paper/insert-thput with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=True is_insert_test=True
+
+python3 ./bench/bench_filters.py  -F paper/insert-thput with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True sort_and_insert_keys=False is_insert_test=True
+
+
+# python3 ./bench/bench_filters.py  -F phased-test-runs/uniform with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=True is_phased_test=True num_phases=2 start_with_adversarial_phase=True
+
+# python3 ./bench/bench_filters.py  -F phased-test-runs/uniform with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=splinterDB query_workload=uniform break_even=2 collect_db_stats=False quotient_bits=24 capture_extra_stats=True is_phased_test=True num_phases=2 start_with_adversarial_phase=True
+
+# python3 ./bench/bench_filters.py  -F phased-test-runs/uniform with num_queries=1000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=24 capture_extra_stats=True is_phased_test=True num_phases=2 start_with_adversarial_phase=False
 
 exit
 

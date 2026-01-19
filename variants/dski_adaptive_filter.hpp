@@ -54,8 +54,14 @@ public:
       }
 #endif
 
-      ret = reverseMap.insertFingerprint(
+      if (benchmarkParams.sortAndInsertFingerprints) {
+        ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
+      } else {
+        ret = reverseMap.insertAndCommitFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      }
+
       if (ret) {
         return -1;
       }

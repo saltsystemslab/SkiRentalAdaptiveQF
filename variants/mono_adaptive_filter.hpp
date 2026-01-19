@@ -43,8 +43,15 @@ public:
       }
       uint64_t fingerprint = result.minirun_id;
       uint64_t value = keys[i];
-      ret =
-          reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
+
+      if (benchParams.sortAndInsertFingerprints) {
+        ret = reverseMap.insertFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      } else {
+        ret = reverseMap.insertAndCommitFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      }
+
       if (ret < 0) {
         return -1;
       }

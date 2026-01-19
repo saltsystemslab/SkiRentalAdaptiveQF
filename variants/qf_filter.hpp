@@ -33,6 +33,7 @@ struct BenchmarkParams {
   uint64_t storageCacheSizeMB;
   uint64_t reverseMapCacheSizeMB;
   bool shouldSort;
+  bool sortAndInsertFingerprints;
 };
 
 #endif

@@ -17,6 +17,10 @@ public:
     return 0;
   }
 
+  int insertAndCommitFingerprint(uint64_t fingerprint, uint64_t rank, uint64_t key) {
+    return 0;
+  }
+
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
     uint64_t mask = -1;
     mask = mask << quotient_remainder_bits;
