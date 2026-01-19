@@ -214,7 +214,7 @@ def run_filter_bench(
                 ex.add_artifact("%s_rm_stats.json" % filter)
 
     ### Parsing DB Stats
-    if not microbench:
+    if (not microbench) and (not is_insert_test):
         with tqdm(
             desc="Parsing DB Stats" + filter, bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:
