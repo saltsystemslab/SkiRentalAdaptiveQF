@@ -13,7 +13,7 @@ public:
 
     char table_schema[max_schema_len];
     char connection_config[max_conn_config_len];
-    sprintf(table_schema, "key_format=Q,value_format=504s");
+    sprintf(table_schema, "key_format=Q,value_format=Q");
     if (collectStats) {
       sprintf(
         connection_config,
@@ -43,8 +43,9 @@ public:
   int insertKV(uint64_t key, uint64_t value, int isUpdate) {
     cursor->reset(cursor);
     cursor->set_key(cursor, key);
-    memcpy((char *)(&value), buf, 8);
-    cursor->set_value(cursor, buf);
+    // memcpy((char *)(&value), buf, 8);
+    // cursor->set_value(cursor, buf);
+    cursor->set_value(cursor, value);
     error_check(cursor->insert(cursor));
     return 0;
   }

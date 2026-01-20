@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Large-tests
+ python3 ./bench/bench_filters.py  -F paper/uniform with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False 
  python3 ./bench/bench_filters.py  -F paper/uniform-phased-adv-first with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=4 start_with_adversarial_phase=True
  python3 ./bench/bench_filters.py  -F paper/uniform-phased with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=False is_phased_test=True num_phases=4 start_with_adversarial_phase=False
 
