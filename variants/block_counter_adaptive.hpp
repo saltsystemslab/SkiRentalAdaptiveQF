@@ -123,6 +123,14 @@ public:
     return 0;
   }
 
+  double getAdaptiveMACost() {
+    return 0.0;
+  }
+
+  double getNonAdaptiveMACost() {
+    return 0.0;
+  }
+
 private:
   QF qf;
   ReverseMap reverseMap;

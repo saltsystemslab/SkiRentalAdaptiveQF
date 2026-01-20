@@ -144,6 +144,14 @@ public:
     return qf.metadata->total_size_in_bytes;
   }
 
+  double getAdaptiveMACost() {
+    return 0.0;
+  }
+
+  double getNonAdaptiveMACost() {
+    return 0.0;
+  }
+
 private:
   bool coin_flip(int day) {
     if (day > breakEvenCount)

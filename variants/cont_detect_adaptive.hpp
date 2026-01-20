@@ -1,5 +1,5 @@
-#ifndef SD_ADAPTIVE_FILTER
-#define SD_ADAPTIVE_FILTER
+#ifndef CONT_ADAPTIVE_FILTER
+#define CONT_ADAPTIVE_FILTER
 
 #include "qf_filter.hpp"
 #include <cstddef>
@@ -9,7 +9,7 @@ extern "C" {
 #include "include/test_driver.h"
 }
 
-template <typename ReverseMap> class SampleDetectAdaptiveFilter {
+template <typename ReverseMap> class ContDetectAdaptiveFilter {
 public:
   int construct(BenchmarkParams params) {
     benchParams = params;
@@ -30,6 +30,8 @@ public:
     shouldAdaptNow = false;
     numEmptyQueries = 0;
     numCollisions = 0;
+    numBeneficialAdapts = 0;
+    numBfInserts = 0;
     return 0;
   }
 
@@ -68,12 +70,23 @@ public:
   int queryFilter(uint64_t queryKey, QFilterQueryResult *result) {
     int minirun_rank;
     uint64_t hash;
-    if ((minirun_rank = qf_query_using_ll_table(
-             &qf, queryKey, &hash, QF_KEY_IS_HASH)) >= 0) {
+    int ext_len = 0;
+    if ((minirun_rank = qf_query_using_ll_table_with_ext_len(
+             &qf, queryKey, &hash, &ext_len, QF_KEY_IS_HASH)) >= 0) {
       result->key_present = 1;
     } else {
       result->key_present = 0;
       numEmptyQueries++;
+      if (ext_len > 0) {
+        numBeneficialAdapts++;
+      }
+      if (numEmptyQueries == windowSize) {
+        numCollisionsMA = (1.0 - smoothing_factor) * numCollisionsMA + smoothing_factor * numCollisions;
+        numEmptyQueries = 0;
+        numCollisions = 0;
+        numBeneficialAdapts = 0;
+        bf.reset();
+      }
     }
     result->hash = hash;
     result->minirun_rank = minirun_rank;
@@ -81,53 +94,49 @@ public:
   }
 
   int adapt(uint64_t queryKey, QFilterQueryResult *filterResult) {
-    numEmptyQueries++;
-    int adapted = 0;
-    if (qf.metadata->noccupied_slots >= full_point) {
-      return -1; // Don't have space to adapt more.
+    uint64_t tempKey = queryKey;
+    uint64_t bf_hash[4];
+    bool isInBf = true;
+    for (uint64_t i=0; i<4; i++) {
+      bf_hash[i] = (tempKey) & ((1<<16)-1);
+      tempKey = tempKey >> 16;
+      isInBf = isInBf && (bf.test(bf_hash[i]));
     }
 
-    if (shouldAdaptNow || numEmptyQueries >= sampleThreshold) {
-      if (shouldAdaptNow) {
-        uint64_t origKey;
-        uint64_t fingerprint = filterResult->hash;
-        reverseMap.getFingerprint(
-        fingerprint, filterResult->minirun_rank, &origKey);
-        qf_adapt_using_ll_table(
-            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        adapted = 1;
-      } else {
-        adapted = 0; // Don't adapt
-      }
-    }
-    else if (numEmptyQueries < sampleThreshold) {
-      uint64_t tempKey = queryKey;
-      uint64_t bf_hash[4];
-      bool isInBf = true;
-      for (uint64_t i=0; i<4; i++) {
-        bf_hash[i] = (tempKey) & ((1<<16)-1);
-        tempKey = tempKey >> 16;
-        isInBf = isInBf && (bf.test(bf_hash[i]));
-      }
-      if (isInBf) {
-        numCollisions++;
-        uint64_t origKey;
-        uint64_t fingerprint = filterResult->hash;
-        reverseMap.getFingerprint(
-        fingerprint, filterResult->minirun_rank, &origKey);
-        qf_adapt_using_ll_table(
-            &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
-        adapted = 1;
-      }     
-      if (numCollisions >= bf_FpThreshold) {
-        shouldAdaptNow = 1;
-      }
-      // Insert query key into bloom filter.
+    int adaptiveCost = 0;
+    if (isInBf) {
+      adaptiveCost = 0;
+      numCollisions++;
+    } else {
       for (uint64_t i=0; i<4; i++) {
         bf.set(bf_hash[i]);
       }
+      adaptiveCost = 2;
     }
-    return adapted; // Not adapting.
+
+    numEmptyQueries++;
+    if (numEmptyQueries == windowSize) {
+        // printf("For a window of %llu queries, found: %llu collisions and %llu queries for adapted\n", numEmptyQueries, numCollisions, numBeneficialAdapts);
+        numCollisionsMA = (1.0 - smoothing_factor) * numCollisionsMA + smoothing_factor * numCollisions;
+        numEmptyQueries = 0;
+        numCollisions = 0;
+        numBeneficialAdapts = 0;
+        bf.reset();
+    }
+
+    int adapted;
+    if (numCollisionsMA > bf_FpThreshold) {
+      uint64_t origKey;
+      uint64_t fingerprint = filterResult->hash;
+      reverseMap.getFingerprint(
+      fingerprint, filterResult->minirun_rank, &origKey);
+      qf_adapt_using_ll_table(
+          &qf, origKey, queryKey, filterResult->minirun_rank, QF_KEY_IS_HASH);
+      adapted = 1;
+    } else {
+      adapted = 0;
+    }
+    return adapted;
   }
 
   double loadFactor() {
@@ -138,17 +147,19 @@ public:
     return qf.metadata->total_size_in_bytes + bf.size()/8 + sizeof(uint64_t) * 5;
   }
 
+  // TODO(chesetti): RENAME THIS METHOD
+  double getAdaptiveMACost() {
+    return numCollisions;
+  }
+
+  // TODO(chesetti): RENAME THIS METHOD
+  double getNonAdaptiveMACost() {
+    return numCollisionsMA;
+  }
+
   int close() {
     reverseMap.close();
     return 0;
-  }
-
-  double getAdaptiveMACost() {
-    return 0.0;
-  }
-
-  double getNonAdaptiveMACost() {
-    return numCollisions;
   }
 
 private:
@@ -161,9 +172,15 @@ private:
   bool shouldAdaptNow;
   uint64_t numEmptyQueries;
   uint64_t numCollisions;
-  uint64_t sampleThreshold=1000000;
+  uint64_t numBeneficialAdapts;
   uint64_t bf_FpThreshold=6;
   std::bitset<65536> bf;
+  uint64_t bf_limit = 3092;
+
+  double numCollisionsMA = 0;
+  double smoothing_factor = 0.7;
+  uint64_t numBfInserts = 0;
+  uint64_t windowSize = 1000000;
 };
 
 #endif

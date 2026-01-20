@@ -4,7 +4,9 @@ import os
 import subprocess
 
 ex = Experiment()
-all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect"]
+#all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect", "contDetect"]
+all_filters = ["sampleDetect", "contDetect", "repeatDetect"]
+#all_filters = ["sampleDetect", "contDetect"]
 # filters = ['repeatDetect']
 
 
@@ -31,6 +33,7 @@ def test_config():
     num_phases = 2
     start_with_adversarial_phase = False
     is_insert_test = False
+    skip_db_parse = False
     sort_and_insert_keys=True
 
 
@@ -58,7 +61,8 @@ def run_filter_bench(
     num_phases,
     start_with_adversarial_phase,
     sort_and_insert_keys,
-    is_insert_test
+    is_insert_test,
+    skip_db_parse
 ):
     filters = all_filters
     if is_insert_test:
@@ -214,7 +218,7 @@ def run_filter_bench(
                 ex.add_artifact("%s_rm_stats.json" % filter)
 
     ### Parsing DB Stats
-    if (not microbench) and (not is_insert_test):
+    if (skip_db_parse) or ((not microbench) and (not is_insert_test)):
         with tqdm(
             desc="Parsing DB Stats" + filter, bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:

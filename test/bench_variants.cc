@@ -19,6 +19,7 @@
 #include "coin_flip_adaptive.hpp"
 #include "non_adaptive_filter.hpp"
 #include "block_counter_adaptive.hpp"
+#include "cont_detect_adaptive.hpp"
 #endif
 
 #include "splinter_backing_store.hpp"
@@ -128,7 +129,7 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(
       rounds_file,
       "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
-      "round_adapts cumulative_adapts load_factor\n");
+      "round_adapts cumulative_adapts load_factor adaptMA nonAdaptMA\n");
 
   int ret = 0;
   ret = qf.construct(params);
@@ -263,7 +264,7 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -273,10 +274,13 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor());
+        qf.loadFactor(),
+        qf.getAdaptiveMACost(),
+        qf.getNonAdaptiveMACost()
+        );
     fprintf(
         stdout,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -286,7 +290,10 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor());
+        qf.loadFactor(),
+        qf.getAdaptiveMACost(),
+        qf.getNonAdaptiveMACost()
+        );
   }
 #ifdef PERF
   std::string latency_file_name = params.output_file + "_latency.csv";
@@ -421,6 +428,10 @@ int run_benchmark_with_storage_engine(
   }
   if (filterType == "sampleDetect") {
     ret = run_benchmark<DbStorageEngine, SampleDetectAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
+  if (filterType == "contDetect") {
+    ret = run_benchmark<DbStorageEngine, ContDetectAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
   #endif

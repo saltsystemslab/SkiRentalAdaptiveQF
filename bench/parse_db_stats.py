@@ -21,7 +21,7 @@ def parse_json_file(path):
 
 testDir = sys.argv[1]
 
-filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect']
+filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect', 'contDetect']
 db_stats = {}
 db_stats_summary = []
 for filter in filters:
