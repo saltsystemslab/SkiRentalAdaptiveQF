@@ -30,8 +30,9 @@ public:
     shouldAdaptNow = false;
     numEmptyQueries = 0;
     numCollisions = 0;
-    numBeneficialAdapts = 0;
+    numAdaptCollisions = 0;
     numBfInserts = 0;
+    numAdapts = 0;
     return 0;
   }
 
@@ -78,13 +79,19 @@ public:
       result->key_present = 0;
       numEmptyQueries++;
       if (ext_len > 0) {
-        numBeneficialAdapts++;
+        numAdaptCollisions++;
       }
       if (numEmptyQueries == windowSize) {
+        double oldNumCollisionsMA = numCollisionsMA;
         numCollisionsMA = (1.0 - smoothing_factor) * numCollisionsMA + smoothing_factor * numCollisions;
+        numAdaptCollisionsMA = (1.0 - smoothing_factor) * numAdaptCollisionsMA + smoothing_factor * numAdaptCollisions;
+        adaptCollisions_threshold = (uint64_t)(3 * windowSize * numAdapts / (1ull << (config.qbits + config.rbits)));
+        // printf("adaptCollisionsThreshold: %lu IsAdapt: %d \n", adaptCollisions_threshold, (numCollisionsMA > bf_FpThreshold || numAdaptCollisionsMA > adaptCollisions_threshold));
+        // printf("adapts: %lu windowsize(2): %lu qbits: %lu rbits: %lu\n", numAdapts, 2*windowSize, config.qbits, config.rbits);
+        // printf("(%lf) Window of %llu queries, found: %llu collisions and %llu queries for adapted. Limits: %lu %lu (%f)\n", oldNumCollisionsMA, numEmptyQueries, numCollisions, numAdaptCollisions, bf_FpThreshold, adaptCollisions_threshold, numCollisionsMA);
         numEmptyQueries = 0;
         numCollisions = 0;
-        numBeneficialAdapts = 0;
+        numAdaptCollisions = 0;
         bf.reset();
       }
     }
@@ -116,16 +123,20 @@ public:
 
     numEmptyQueries++;
     if (numEmptyQueries == windowSize) {
-        // printf("For a window of %llu queries, found: %llu collisions and %llu queries for adapted\n", numEmptyQueries, numCollisions, numBeneficialAdapts);
+        double oldNumCollisionsMA = numCollisionsMA;
         numCollisionsMA = (1.0 - smoothing_factor) * numCollisionsMA + smoothing_factor * numCollisions;
+        numAdaptCollisionsMA = (1.0 - smoothing_factor) * numAdaptCollisionsMA + smoothing_factor * numAdaptCollisions;
+        adaptCollisions_threshold = (uint64_t)(2 * windowSize * numAdapts / (1ull << (config.qbits + 2*config.rbits)));
+        // printf("adaptCollisionsThreshold: %lu IsAdapt: %d \n", adaptCollisions_threshold, (numCollisionsMA > bf_FpThreshold || numAdaptCollisionsMA > adaptCollisions_threshold));
+        // printf("(%lf) Window of %llu queries, found: %llu collisions and %llu queries for adapted. Limits: %lu %lu (%f)\n", oldNumCollisionsMA, numEmptyQueries, numCollisions, numAdaptCollisions, bf_FpThreshold, adaptCollisions_threshold, numCollisionsMA);
         numEmptyQueries = 0;
         numCollisions = 0;
-        numBeneficialAdapts = 0;
+        numAdaptCollisions = 0;
         bf.reset();
     }
 
     int adapted;
-    if (numCollisionsMA > bf_FpThreshold) {
+    if (numCollisionsMA > bf_FpThreshold || numAdaptCollisionsMA > adaptCollisions_threshold) {
       uint64_t origKey;
       uint64_t fingerprint = filterResult->hash;
       reverseMap.getFingerprint(
@@ -136,6 +147,7 @@ public:
     } else {
       adapted = 0;
     }
+    numAdapts += adapted;
     return adapted;
   }
 
@@ -149,7 +161,7 @@ public:
 
   // TODO(chesetti): RENAME THIS METHOD
   double getAdaptiveMACost() {
-    return numCollisions;
+    return numAdaptCollisionsMA;
   }
 
   // TODO(chesetti): RENAME THIS METHOD
@@ -172,12 +184,16 @@ private:
   bool shouldAdaptNow;
   uint64_t numEmptyQueries;
   uint64_t numCollisions;
-  uint64_t numBeneficialAdapts;
+  uint64_t numAdaptCollisions;
+  uint64_t numAdapts = 0;
+
   uint64_t bf_FpThreshold=6;
+  uint64_t adaptCollisions_threshold = 0;
   std::bitset<65536> bf;
   uint64_t bf_limit = 3092;
 
   double numCollisionsMA = 0;
+  double numAdaptCollisionsMA = 0.0;
   double smoothing_factor = 0.7;
   uint64_t numBfInserts = 0;
   uint64_t windowSize = 1000000;
