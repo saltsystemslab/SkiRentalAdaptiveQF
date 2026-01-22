@@ -3,11 +3,15 @@ from sacred import Experiment
 import os
 import subprocess
 
+# TODO(Chesetti): Lot's of hardcoded variables. Move them to strings.
+
 ex = Experiment()
-#all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect", "contDetect"]
-all_filters = ["sampleDetect", "contDetect", "repeatDetect"]
-#all_filters = ["sampleDetect", "contDetect"]
-# filters = ['repeatDetect']
+
+work_dir = './sponge'
+exe_dir = './build' # KEEP in SYNC with the Makefile. All exe are run with cwd=work_dir
+build_log_dir = './sponge'
+
+all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect", "contDetect"]
 
 
 @ex.config
@@ -74,25 +78,28 @@ def run_filter_bench(
     if capture_extra_stats:
         extra_build_flags = " EXTRA_STATS=1"
 
+    ### Make runs in current directory, tool invocations run in cwd=sponge
+    ### Assumes binaries are located in '../'
+
     ### Build Workload Generator Tool
     cmd = "make clean workload_gen "
-    log_file = "workload-build.log"
-    with open(log_file, "w") as f:
+    log_file_path = os.path.join(build_log_dir, "workload-build.log")
+    with open(log_file_path, "w") as log_file:
         with tqdm(
             desc="Building Workload-Generator\n" + cmd + extra_build_flags,
             bar_format="{desc}\nElapsed:{elapsed}",
         ) as pbar:
             ret = subprocess.run(
-                cmd + extra_build_flags, shell=True, stdout=f, stderr=subprocess.STDOUT
+                cmd + extra_build_flags, shell=True, stdout=log_file, stderr=subprocess.STDOUT
             )
-    ex.add_artifact(log_file)
+    ex.add_artifact(log_file_path)
     if ret.returncode != 0:
-        print("Workload-Generator build failed, check %s" % log_file)
+        print("Workload-Generator build failed, check %s" % log_file_path)
         return
 
     ### Generate Workload
-    log_file = "workload-gen.log"
-    cmd = "./workload_gen"
+    cmd = os.path.join(exe_dir, "workload_gen")
+    log_file_path = os.path.join(work_dir, "workload-gen.log")
     argDict = {
         "-q": quotient_bits,
         "-r": remainder_bits,
@@ -107,13 +114,14 @@ def run_filter_bench(
     if hash_again_for_zipfian:
         cmd = cmd + " --hashAgainForZipfian"
 
-    with open(log_file, "w") as f:
+    with open(log_file_path, "w") as log_file:
         with tqdm(
             desc="\nGenerating Workload\n" + cmd, bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:
-            ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
+            ret = subprocess.run(cmd, cwd=work_dir, shell=True, stdout=log_file, stderr=subprocess.STDOUT)
+    ex.add_artifact(log_file_path)
     if ret.returncode != 0:
-        print("Generating workload failed!")
+        print("Generating workload failed! Check: " + log_file_path)
         exit()
     #ex.add_artifact("queryStats")
     #ex.add_artifact("rankFreq")
@@ -124,14 +132,11 @@ def run_filter_bench(
     ### Build benchmark
     for filter in filters:
         build_cmd = ""
-        log_file = filter + "_build.log"
+        log_file_path = os.path.join(build_log_dir, filter + "_build.log")
         if filter == "nonAdaptive":
             build_cmd = (
-                "make clean && make bench_variants" + extra_build_flags
+                "make clean && make bench_variants" + extra_build_flags # ADD USE_CQF=1 if you want to use original CQF code.
             )
-            #build_cmd = (
-            #    "make clean && make bench_variants USE_CQF=1" + extra_build_flags
-            #)
         elif filter == "blockCount":
             build_cmd = (
                 "make clean && make bench_variants SEVEN_BIT_OFFSET=1"
@@ -140,16 +145,17 @@ def run_filter_bench(
         else:
             build_cmd = "make clean && make bench_variants" + extra_build_flags
 
-        with open(log_file, "w") as f:
+        with open(log_file_path, "w") as log_file:
             with tqdm(
                 desc="\nBuilding benchmark for " + filter + "\n" + build_cmd,
                 bar_format="{desc}\nElapsed:{elapsed}",
             ) as pbar:
                 ret = subprocess.run(
-                    build_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT
+                    build_cmd, shell=True, stdout=log_file, stderr=subprocess.STDOUT
                 )
+        ex.add_artifact(log_file_path)
         if ret.returncode != 0:
-            print("Building benchmark failed!")
+            print("Building benchmark failed! Check " + log_file_path)
             exit()
 
         ### Running benchmark
@@ -166,7 +172,7 @@ def run_filter_bench(
             "--breakEven": break_even,
             "--numPhases": num_phases,
         }
-        cmd = "./bench_variants --filter %s " % filter
+        cmd = "%s/bench_variants --filter %s " % (exe_dir, filter)
         for arg_name in argDict:
             cmd = cmd + (" %s %s" % (arg_name, argDict[arg_name]))
         if microbench:
@@ -184,16 +190,21 @@ def run_filter_bench(
             desc="\nRunning benchmark for " + filter + "\n" + cmd,
             bar_format="{desc}\nElapsed:{elapsed}",
         ) as pbar:
-            ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
+            ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
         if ret.returncode != 0:
             print("Benchmark failed!")
             exit()
 
-        ex.add_artifact("%s.csv" % filter)
-        ex.add_artifact("%s_summary.csv" % filter)
+        csv_path = os.path.join(work_dir, '%s.csv' % filter)
+        summary_path = os.path.join(work_dir, '%s_summary.csv' % filter)
+        latency_path = os.path.join(work_dir, '%s_latency.csv' % filter)
+        fp_stats_path = os.path.join(work_dir, '%s_fp_stats.csv' % filter)
+        
+        ex.add_artifact(csv_path)
+        ex.add_artifact(summary_path)
         if capture_extra_stats:
-            ex.add_artifact("%s_latency.csv" % filter)
-            ex.add_artifact("%s_fp_stats.csv" % filter)
+            ex.add_artifact(latency_path)
+            ex.add_artifact(fp_stats_path)
 
         ### Copying DB Stats
         if collect_db_stats and not microbench:
@@ -202,8 +213,8 @@ def run_filter_bench(
                 bar_format="{desc}\nElapsed:{elapsed}",
             ) as pbar:
                 cmd = "cp database_wiredTiger/WiredTigerStat* %s_db_stats.json" % filter
-                ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
-            ex.add_artifact("%s_db_stats.json" % filter)
+                ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
+            ex.add_artifact(os.path.join(work_dir, "%s_db_stats.json" % filter))
 
             if reverse_map_engine == "wiredTiger" and filter != "nonAdaptive":
                 with tqdm(
@@ -214,18 +225,18 @@ def run_filter_bench(
                         "cp reverseMap_wiredTiger/WiredTigerStat* %s_rm_stats.json"
                         % filter
                     )
-                    ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
-                ex.add_artifact("%s_rm_stats.json" % filter)
+                    ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
+                ex.add_artifact(os.path.join(work_dir, "%s_rm_stats.json" % filter))
 
     ### Parsing DB Stats
     if (skip_db_parse) or ((not microbench) and (not is_insert_test)):
         with tqdm(
             desc="Parsing DB Stats" + filter, bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:
-            cmd = "python3 ./bench/parse_db_stats.py ."
+            cmd = "python3 ./bench/parse_db_stats.py %s" % work_dir
             ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
-        ex.add_artifact("db_stats.csv")
-        ex.add_artifact("rm_stats.csv")
+        ex.add_artifact(os.path.join(work_dir, "db_stats.csv"))
+        ex.add_artifact(os.path.join(work_dir, "rm_stats.csv"))
 
 
 @ex.automain
