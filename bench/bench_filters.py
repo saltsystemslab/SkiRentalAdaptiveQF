@@ -39,6 +39,7 @@ def test_config():
     is_insert_test = False
     skip_db_parse = False
     sort_and_insert_keys=True
+    sort_and_insert_fingerprints=True
 
 
 @ex.capture
@@ -65,6 +66,7 @@ def run_filter_bench(
     num_phases,
     start_with_adversarial_phase,
     sort_and_insert_keys,
+    sort_and_insert_fingerprints,
     is_insert_test,
     skip_db_parse
 ):
@@ -82,7 +84,7 @@ def run_filter_bench(
     ### Assumes binaries are located in '../'
 
     ### Build Workload Generator Tool
-    cmd = "make clean workload_gen "
+    cmd = "make clean workload_gen"
     log_file_path = os.path.join(build_log_dir, "workload-build.log")
     with open(log_file_path, "w") as log_file:
         with tqdm(
@@ -183,8 +185,16 @@ def run_filter_bench(
             cmd = cmd + " --phasedTest"
         if start_with_adversarial_phase:
             cmd = cmd + " --startWithAdversarialPhase"
-        if sort_and_insert_keys:
+
+        if sort_and_insert_fingerprints:
             cmd = cmd + " --sortAndInsertFingerprints"
+        else:
+            cmd = cmd + " --sortAndInsertFingerprints=False"
+
+        if sort_and_insert_keys:
+            cmd = cmd + " --sortAndInsertKeys"
+        else:
+            cmd = cmd + " --sortAndInsertKeys=False"
 
         with tqdm(
             desc="\nRunning benchmark for " + filter + "\n" + cmd,
@@ -207,7 +217,7 @@ def run_filter_bench(
             ex.add_artifact(fp_stats_path)
 
         ### Copying DB Stats
-        if collect_db_stats and not microbench:
+        if collect_db_stats and not microbench and reverse_map_engine == "wiredTiger":
             with tqdm(
                 desc="\nCopying DB Stats for " + filter,
                 bar_format="{desc}\nElapsed:{elapsed}",

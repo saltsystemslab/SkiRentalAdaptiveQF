@@ -46,15 +46,21 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   sort(fp_miss_latencies.begin(), fp_miss_latencies.end());
   sort(adapt_latencies.begin(), adapt_latencies.end());
 
+
   FILE *latency_file = fopen(output_file_name.c_str(), "w");
-  fprintf(latency_file,"metric,numSamples,min,50p,99p,99.99p,max\n");
+  fprintf(latency_file,"metric,numSamples,min,50p,99p,99.99p,max,avg\n");
 
   {
   int p50 = fp_miss_latencies.size() / 2;
   int p99 = fp_miss_latencies.size() * 0.99;
   int p9999 = fp_miss_latencies.size() * 0.9999;
   int max = fp_miss_latencies.size()-1;
-  fprintf(latency_file,"DbMiss,%lu,%lu,%lu,%lu,%lu,%lu\n", fp_miss_latencies.size(), fp_miss_latencies[0], fp_miss_latencies[p50], fp_miss_latencies[p99], fp_miss_latencies[p9999], fp_miss_latencies[max]);
+  double den = 1.0 / fp_miss_latencies.size();
+  double avg = 0.0;
+  for (uint64_t i = 0; i < fp_miss_latencies.size(); i++) {
+    avg = avg + den * fp_miss_latencies[i];
+  }
+  fprintf(latency_file,"DbMiss,%lu,%lu,%lu,%lu,%lu,%lu,%f\n", fp_miss_latencies.size(), fp_miss_latencies[0], fp_miss_latencies[p50], fp_miss_latencies[p99], fp_miss_latencies[p9999], fp_miss_latencies[max],avg);
   }
 
   {
@@ -62,7 +68,12 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   int p99 = adapt_latencies.size() * 0.99;
   int p9999 = adapt_latencies.size() * 0.9999;
   int max = adapt_latencies.size()-1;
-  fprintf(latency_file,"Adapt,%lu,%lu,%lu,%lu,%lu,%lu\n", adapt_latencies.size(), adapt_latencies[0], adapt_latencies[p50], adapt_latencies[p99], adapt_latencies[p9999], adapt_latencies[max]);
+  double den = 1.0 / adapt_latencies.size();
+  double avg = 0.0;
+  for (uint64_t i = 0; i < adapt_latencies.size(); i++) {
+    avg = avg + den * adapt_latencies[i];
+  }
+  fprintf(latency_file,"Adapt,%lu,%lu,%lu,%lu,%lu,%lu,%f\n", adapt_latencies.size(), adapt_latencies[0], adapt_latencies[p50], adapt_latencies[p99], adapt_latencies[p9999], adapt_latencies[max],avg);
   }
 
   fclose(latency_file);
@@ -117,8 +128,9 @@ int run_benchmark(BenchmarkParams params) {
 
 
 #ifdef PERF
-  double sampleRate = 0.9;
+  double sampleRate = 1.0;
   uint64_t sampleThreshold = INT_MAX * sampleRate;
+  printf("sampleThreshold: %lu", sampleThreshold);
   std::vector<uint64_t> fp_miss_latencies;
   std::unordered_map<uint64_t, uint64_t> fp_freq;
   std::vector<uint64_t> adapt_latencies;
@@ -215,13 +227,13 @@ int run_benchmark(BenchmarkParams params) {
 #ifdef PERF
         fp_freq[queryKey]++;
         bool sampleQuery = rand() < sampleThreshold;
-        if (sampleQuery && r==0) {
+        if (sampleQuery) {
           dbQueryStart = std::chrono::high_resolution_clock::now();
         }
 #endif
         int dbQueryResult = db.searchKV(queryKey);
 #ifdef PERF
-        if (sampleQuery && r==0) {
+        if (sampleQuery) {
           dbQueryEnd = std::chrono::high_resolution_clock::now();
           uint64_t timeElapsed = (dbQueryEnd - dbQueryStart).count();
           fp_miss_latencies.push_back(timeElapsed);
@@ -232,13 +244,13 @@ int run_benchmark(BenchmarkParams params) {
           fpCount++;
           roundFpCount++;
 #ifdef PERF
-          if (sampleQuery && r==0) {
+          if (sampleQuery) {
             adaptStart = std::chrono::high_resolution_clock::now();
           }
 #endif
           int adaptRetCode = qf.adapt(queryKey, &qfFilterQueryResult);
 #ifdef PERF
-          if (sampleQuery && r==0) {
+          if (sampleQuery) {
             adaptEnd = std::chrono::high_resolution_clock::now();
             adapt_latencies.push_back((adaptEnd - adaptStart).count());
           }
@@ -302,8 +314,9 @@ int run_benchmark(BenchmarkParams params) {
   std::string fp_stats_file = params.output_file + "_fp_stats.csv";
   write_fp_stats_to_file(fp_stats_file.c_str(), fp_freq);
 #endif
-  db.close();
   printf("Done with the test\n");
+  db.close();
+  printf("Close DB\n");
 
 // Run Microbenchmarks with only in-memory operations at end of the load test
 {
@@ -328,31 +341,10 @@ int run_benchmark(BenchmarkParams params) {
   std::chrono::duration<double, std::micro> tp_overall_duration =
         tp_query_end - tp_query_start;
 
-  #if 0
-// Negative queries: Query false positives again, but only measure the throughput.
-  uint64_t numFp=0;
-  auto fp_query_start = std::chrono::high_resolution_clock::now();
-  for (uint64_t i=0; i < numQueries; i++) {
-      qf.queryFilter(querySet[i], &qfFilterQueryResult);
-      if (qfFilterQueryResult.key_present) numFp++;
-  }
-  auto fp_query_end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::micro> fp_overall_duration =
-        fp_query_end - fp_query_start;
-  #endif
   }
 
   {
   // Force the filter to adapt to get it to 95% load factor.
-  #if 0
-  auto fp_query_start = std::chrono::high_resolution_clock::now();
-  for (uint64_t i=0; i < numQueries; i++) {
-      qf.queryFilter(querySet[i], &qfFilterQueryResult);
-      if (qfFilterQueryResult.key_present) {
-        qf.adapt(querySet[i], &qfFilterQueryResult);
-      }
-  }
-  #endif
 
 // True queries: Query the insert set.
   auto tp_query_start = std::chrono::high_resolution_clock::now();
@@ -498,6 +490,10 @@ int main(int argc, char **argv) {
       "Sort all fingerprints before inserting into reverse map, speeds up wiredTiger as reverse map creation",
       cxxopts::value<bool>()->default_value("true"))(
 
+      "sortAndInsertKeys",
+      "Sort Keys before inserting into reverse map, speeds up wiredTiger inserts in DB",
+      cxxopts::value<bool>()->default_value("true"))(
+
       "dbStats",
       "Collect DB Stats (WiredTiger)",
       cxxopts::value<bool>()->default_value("false"))(
@@ -535,7 +531,7 @@ int main(int argc, char **argv) {
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
   bool sortAndInsertFingerprints = result["sortAndInsertFingerprints"].as<bool>();
-  bool shouldSort = !microBench;
+  bool shouldSort = result["sortAndInsertKeys"].as<bool>();
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
   bool isPhasedTest = result["phasedTest"].as<bool>();
   bool startWithAdversarialPhase = result["startWithAdversarialPhase"].as<bool>();
@@ -543,6 +539,10 @@ int main(int argc, char **argv) {
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
   uint64_t *querySet;
+
+  if (microBench) {
+    shouldSort = false;
+  }
 
 
   std::cout << "Testing filter: " << filterType
