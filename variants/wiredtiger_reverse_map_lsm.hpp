@@ -1,9 +1,9 @@
-#ifndef WT_BACKING_STORE_H
-#define WT_BACKING_STORE_H
+#ifndef WT_REVERSE_MAP_LSM_H
+#define WT_REVERSE_MAP_LSM_H
 
 #include "wiredtiger.h"
 
-class WiredTigerBackingStore {
+class WiredTigerReverseMapLsm {
 public:
   int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
     dbName = dbName + "_wiredTiger";
@@ -13,7 +13,7 @@ public:
 
     char table_schema[max_schema_len];
     char connection_config[max_conn_config_len];
-    sprintf(table_schema, "key_format=Q,value_format=Q");
+    sprintf(table_schema, "type=lsm,key_format=Q,value_format=Q");
     if (collectStats) {
       sprintf(
         connection_config,
@@ -36,46 +36,61 @@ public:
 
     printf("DB created!\n");
     this->quotient_remainder_bits = quotient_remainder_bits;
-    buf = new char[508];
     return 0;
   }
 
   int insertKV(uint64_t key, uint64_t value, int isUpdate) {
-    cursor->reset(cursor);
-    cursor->set_key(cursor, key);
-    // memcpy((char *)(&value), buf, 8);
-    // cursor->set_value(cursor, buf);
-    cursor->set_value(cursor, value);
-    error_check(cursor->insert(cursor));
+    abort();
     return 0;
   }
 
   int searchKV(uint64_t key) {
-    cursor->set_key(cursor, key);
-    if (cursor->search(cursor) == WT_NOTFOUND) {
-      return 0;
-    } else if (cursor->search(cursor) != 0) {
-      abort();
-    }
+    abort();
     return 1;
   }
 
   int insertFingerprint(uint64_t fingerprint, int rank, uint64_t key) {
-    abort();
+    uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
+    fingerprint = (fingerprint & minirunBitmask)
+                  << (64 - quotient_remainder_bits);
+    fingerprint = fingerprint + rank;
+    fingerprints.push_back(std::pair<uint64_t, uint64_t>(fingerprint, key));
     return 0;
   }
 
   int insertAndCommitFingerprint(uint64_t fingerprint, int rank, uint64_t key) {
-    abort();
+    uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
+    fingerprint = (fingerprint & minirunBitmask)
+                  << (64 - quotient_remainder_bits);
+
+    fingerprint = fingerprint + rank;
+    cursor->set_key(cursor, fingerprint);
+    cursor->set_value(cursor, key);
+    error_check(cursor->insert(cursor));
+
     return 0;
   }
 
   void commitFingerprints() {
-    abort();
+    sort(fingerprints.begin(), fingerprints.end());
+    for (uint64_t i=0; i < fingerprints.size(); i++) {
+      cursor->reset(cursor);
+      cursor->set_key(cursor, fingerprints[i].first);
+      cursor->set_value(cursor, fingerprints[i].second);
+      error_check(cursor->insert(cursor));
+    }
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
-    abort();
+    uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
+    fingerprint = (fingerprint & minirunBitmask)
+                  << (64 - quotient_remainder_bits);
+    fingerprint = fingerprint + rank;
+    cursor->set_key(cursor, fingerprint);
+    if (cursor->search(cursor) == WT_NOTFOUND) {
+      return -1;
+    }
+    error_check(cursor->get_value(cursor, value));
     return 0;
   }
 
@@ -95,7 +110,6 @@ private:
   const uint32_t buffer_pool_size_mb = 512;
   const uint32_t max_schema_len = 128;
   const uint32_t max_conn_config_len = 128;
-  char *buf;
 
   int quotient_remainder_bits;
 

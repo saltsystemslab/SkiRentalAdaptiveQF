@@ -4,15 +4,15 @@ CXXTARGETS=bench_variants workload_gen
 ifndef D
 	DEBUG=
 	OPT=-O3 -DNDEBUG
-	SPLINTERPATH=external/splinterdb/build/release/lib
-	WTPATH=external/wiredtiger/build
-	#SPLINTERPATH=external/splinterdb/btree
+	SPLINTERPATH=$(CURDIR)/external/splinterdb/build/release/lib
+	WTPATH=$(CURDIR)/external/wiredtiger/build
+	#SPLINTERPATH=$(CURDIR)/external/splinterdb/btree
 else
 	DEBUG=-g
 	OPT=-O0
-	SPLINTERPATH=external/splinterdb/build/release/lib
-	WTPATH=external/wiredtiger/build
-	#SPLINTERPATH=external/splinterdb/btree
+	SPLINTERPATH=$(CURDIR)/external/splinterdb/build/release/lib
+	WTPATH=$(CURDIR)/external/wiredtiger/build
+	#SPLINTERPATH=$(CURDIR)/external/splinterdb/btree
 endif
 
 ifdef NH
@@ -28,7 +28,8 @@ endif
 LOC_INCLUDE=include
 LOC_SRC=src
 LOC_TEST=test
-OBJDIR=obj
+OBJ_DIR=sponge/build/obj
+BUILD_DIR=sponge/build
 CQFDIR=other_filters/cqf/obj
 CC = gcc -std=gnu11
 CXX = g++ -std=c++17
@@ -61,75 +62,78 @@ all: $(CTARGETS) $(CXXTARGETS)
 
 # dependencies between programs and .o files
 
-test_throughput:						$(OBJDIR)/test_throughput.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+test_throughput:						$(OBJ_DIR)/test_throughput.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o $(OBJ_DIR)/test_driver.o \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 
-unit_test:						$(OBJDIR)/unit_test.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+unit_test:						$(OBJ_DIR)/unit_test.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 
-test_throughput_nonAdaptive:			$(OBJDIR)/test_throughput_nonAdaptive.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+test_throughput_nonAdaptive:			$(OBJ_DIR)/test_throughput_nonAdaptive.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o $(OBJ_DIR)/test_driver.o \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 
 ifdef USE_CQF
-bench_variants:			$(OBJDIR)/bench_variants.o $(CQFDIR)/gqf.o $(CQFDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o  \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+bench_variants:			$(OBJ_DIR)/bench_variants.o $(CQFDIR)/gqf.o $(CQFDIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o  \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 else
-bench_variants:			$(OBJDIR)/bench_variants.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+bench_variants:			$(OBJ_DIR)/bench_variants.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o $(OBJ_DIR)/test_driver.o \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 endif
 
-workload_gen:			$(OBJDIR)/workload_gen.o $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o \
-										$(OBJDIR)/hashutil.o $(OBJDIR)/splinter_util.o $(OBJDIR)/test_driver.o \
-										$(OBJDIR)/partitioned_counter.o $(OBJDIR)/ll_table.o $(OBJDIR)/rand_util.o
+workload_gen:			$(OBJ_DIR)/workload_gen.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o \
+										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o $(OBJ_DIR)/test_driver.o \
+										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 
 
 # dependencies between .o files and .cc (or .c) files
 
-$(OBJDIR)/gqf.o:						$(LOC_SRC)/gqf.c $(LOC_INCLUDE)/gqf.h
-$(OBJDIR)/gqf_file.o:					$(LOC_SRC)/gqf_file.c $(LOC_INCLUDE)/gqf_file.h
-$(OBJDIR)/hashutil.o:					$(LOC_SRC)/hashutil.c $(LOC_INCLUDE)/hashutil.h
-$(OBJDIR)/partitioned_counter.o:		$(LOC_INCLUDE)/partitioned_counter.h
-$(OBJDIR)/ll_table.o:					$(LOC_SRC)/ll_table.c $(LOC_INCLUDE)/ll_table.h
-$(OBJDIR)/splinter_util.o:				$(LOC_SRC)/splinter_util.c $(LOC_INCLUDE)/splinter_util.h# $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o
-$(OBJDIR)/test_driver.o:				$(LOC_SRC)/test_driver.c $(LOC_INCLUDE)/test_driver.h# $(OBJDIR)/gqf.o $(OBJDIR)/gqf_file.o $(OBJDIR)/splinter_util.o
-$(OBJDIR)/bench_variants.o:				$(LOC_TEST)/bench_variants.cc
-$(OBJDIR)/workload_gen.o:				$(LOC_TEST)/workload_gen.cc $(LOC_SRC)/rand_util.c
+$(OBJ_DIR)/gqf.o:						$(LOC_SRC)/gqf.c $(LOC_INCLUDE)/gqf.h
+$(OBJ_DIR)/gqf_file.o:					$(LOC_SRC)/gqf_file.c $(LOC_INCLUDE)/gqf_file.h
+$(OBJ_DIR)/hashutil.o:					$(LOC_SRC)/hashutil.c $(LOC_INCLUDE)/hashutil.h
+$(OBJ_DIR)/partitioned_counter.o:		$(LOC_INCLUDE)/partitioned_counter.h
+$(OBJ_DIR)/ll_table.o:					$(LOC_SRC)/ll_table.c $(LOC_INCLUDE)/ll_table.h
+$(OBJ_DIR)/splinter_util.o:				$(LOC_SRC)/splinter_util.c $(LOC_INCLUDE)/splinter_util.h# $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o
+$(OBJ_DIR)/test_driver.o:				$(LOC_SRC)/test_driver.c $(LOC_INCLUDE)/test_driver.h# $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o $(OBJ_DIR)/splinter_util.o
+$(OBJ_DIR)/bench_variants.o:				$(LOC_TEST)/bench_variants.cc
+$(OBJ_DIR)/workload_gen.o:				$(LOC_TEST)/workload_gen.cc $(LOC_SRC)/rand_util.c
 
 #
 # generic build rules
 #
 
-$(CTARGETS):
-	$(LD) $^ -o $@ $(LDFLAGS)
+$(CTARGETS): | BUILD_DIR
+	$(LD) $^ -o $(BUILD_DIR)/$@ $(LDFLAGS)
 
-$(SPLTARGETS):
-	$(LD) $^ -o $@ $(LDFLAGS)
+$(SPLTARGETS): | BUILD_DIR
+	$(LD) $^ -o $(BUILD_DIR)/$@ $(LDFLAGS)
 
-$(CXXTARGETS):
-	$(CXX) $^ -o $@ $(LDFLAGS)
+$(CXXTARGETS): 
+	$(CXX) $^ -o $(BUILD_DIR)/$@ $(LDFLAGS)
 
-$(OBJDIR)/%.o: $(LOC_SRC)/%.cc | $(OBJDIR)
+$(OBJ_DIR)/%.o: $(LOC_SRC)/%.cc | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) $< -c -o $@
 
-$(OBJDIR)/%.o: $(LOC_SRC)/%.c | $(OBJDIR)
+$(OBJ_DIR)/%.o: $(LOC_SRC)/%.c | $(OBJ_DIR)
 	$(CC) $(CXXFLAGS) $(INCLUDE) $< -c -o $@
 
-$(OBJDIR)/%.o: $(LOC_TEST)/%.c | $(OBJDIR)
+$(OBJ_DIR)/%.o: $(LOC_TEST)/%.c | $(OBJ_DIR)
 	$(CC) $(CXXFLAGS) $(INCLUDE) $< -c -o $@
 
-$(OBJDIR)/%.o: $(LOC_TEST)/%.cc | $(OBJDIR)
+$(OBJ_DIR)/%.o: $(LOC_TEST)/%.cc | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $(INCLUDE) $< -o $@
 
-$(OBJDIR):
-	@mkdir -p $(OBJDIR)
+$(OBJ_DIR):
+	@mkdir -p $(OBJ_DIR)
+
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
 
 clean:
-	rm -rf $(OBJDIR) $(CTARGETS) $(CXXTARGETS) $(SPLTARGETS) core
+	rm -rf $(OBJ_DIR) $(CTARGETS) $(CXXTARGETS) $(SPLTARGETS) core
 	rm -rf *.csv 
 	rm -rf rm
 	rm -rf reverseMap
@@ -137,3 +141,4 @@ clean:
 	rm -rf output.txt
 	rm -rf database
 	rm -rf *_wiredTiger
+	rm -rf $(BUILD_DIR)

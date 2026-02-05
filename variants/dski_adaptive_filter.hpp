@@ -54,8 +54,14 @@ public:
       }
 #endif
 
-      ret = reverseMap.insertFingerprint(
+      if (benchmarkParams.sortAndInsertFingerprints) {
+        ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
+      } else {
+        ret = reverseMap.insertAndCommitFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      }
+
       if (ret) {
         return -1;
       }
@@ -166,6 +172,14 @@ public:
 
   uint64_t sizeInBytes() {
     return qf.metadata->total_size_in_bytes;
+  }
+
+  double getAdaptiveMACost() {
+    return 0.0;
+  }
+
+  double getNonAdaptiveMACost() {
+    return 0.0;
   }
 
 private:

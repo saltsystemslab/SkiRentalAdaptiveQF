@@ -19,11 +19,14 @@
 #include "coin_flip_adaptive.hpp"
 #include "non_adaptive_filter.hpp"
 #include "block_counter_adaptive.hpp"
+#include "cont_detect_adaptive.hpp"
 #endif
 
 #include "splinter_backing_store.hpp"
 #include "dummy_backing_store.hpp"
 #include "wiredtiger_backing_store.hpp"
+#include "wiredtiger_reverse_map.hpp"
+#include "wiredtiger_reverse_map_lsm.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
     float progress = (float)current / total;
@@ -43,15 +46,21 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   sort(fp_miss_latencies.begin(), fp_miss_latencies.end());
   sort(adapt_latencies.begin(), adapt_latencies.end());
 
+
   FILE *latency_file = fopen(output_file_name.c_str(), "w");
-  fprintf(latency_file,"metric,numSamples,min,50p,99p,99.99p,max\n");
+  fprintf(latency_file,"metric,numSamples,min,50p,99p,99.99p,max,avg\n");
 
   {
   int p50 = fp_miss_latencies.size() / 2;
   int p99 = fp_miss_latencies.size() * 0.99;
   int p9999 = fp_miss_latencies.size() * 0.9999;
   int max = fp_miss_latencies.size()-1;
-  fprintf(latency_file,"DbMiss,%lu,%lu,%lu,%lu,%lu,%lu\n", fp_miss_latencies.size(), fp_miss_latencies[0], fp_miss_latencies[p50], fp_miss_latencies[p99], fp_miss_latencies[p9999], fp_miss_latencies[max]);
+  double den = 1.0 / fp_miss_latencies.size();
+  double avg = 0.0;
+  for (uint64_t i = 0; i < fp_miss_latencies.size(); i++) {
+    avg = avg + den * fp_miss_latencies[i];
+  }
+  fprintf(latency_file,"DbMiss,%lu,%lu,%lu,%lu,%lu,%lu,%f\n", fp_miss_latencies.size(), fp_miss_latencies[0], fp_miss_latencies[p50], fp_miss_latencies[p99], fp_miss_latencies[p9999], fp_miss_latencies[max],avg);
   }
 
   {
@@ -59,16 +68,22 @@ void write_latencies_to_file(std::string output_file_name, std::vector<uint64_t>
   int p99 = adapt_latencies.size() * 0.99;
   int p9999 = adapt_latencies.size() * 0.9999;
   int max = adapt_latencies.size()-1;
-  fprintf(latency_file,"Adapt,%lu,%lu,%lu,%lu,%lu,%lu\n", adapt_latencies.size(), adapt_latencies[0], adapt_latencies[p50], adapt_latencies[p99], adapt_latencies[p9999], adapt_latencies[max]);
+  double den = 1.0 / adapt_latencies.size();
+  double avg = 0.0;
+  for (uint64_t i = 0; i < adapt_latencies.size(); i++) {
+    avg = avg + den * adapt_latencies[i];
+  }
+  fprintf(latency_file,"Adapt,%lu,%lu,%lu,%lu,%lu,%lu,%f\n", adapt_latencies.size(), adapt_latencies[0], adapt_latencies[p50], adapt_latencies[p99], adapt_latencies[p9999], adapt_latencies[max],avg);
   }
 
   fclose(latency_file);
 }
 
-void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t insertUs, double load_factor, double fpr, uint64_t sizeBytes) {
+void write_microbench_to_file(std::string output_file_name, uint64_t numInserts, uint64_t tpTimeUs, uint64_t numQueries, uint64_t queryTimeUs, uint64_t filterInsertUs, uint64_t systemInsertUs, double load_factor, double fpr, uint64_t sizeBytes) {
   FILE *microbench_file = fopen(output_file_name.c_str(), "w");
   fprintf(microbench_file,"Load Factor:%lf\nFPR:%lf\n", load_factor, fpr);
-  fprintf(microbench_file,"NumInserts: %lu\nInsertTime(us): %lu\nInsert Thput:%lf\n", numInserts, insertUs, (1.0*numInserts)/insertUs);
+  fprintf(microbench_file,"NumInserts: %lu\nFilterInsertTime(us): %lu\nFilterInsert Thput:%lf\n", numInserts, filterInsertUs, (1.0*numInserts)/filterInsertUs);
+  fprintf(microbench_file,"SystemInsertTime(us): %lu\nSystemInsert Thput:%lf\n", systemInsertUs, (1.0*numInserts)/systemInsertUs);
   fprintf(microbench_file,"True Queries: %lu\nTrue Queries(us): %lu\nTrue Queries Thput: %lf\n", numInserts, tpTimeUs, (1.0*numQueries)/(tpTimeUs));
   fprintf(microbench_file,"Queries: %lu\nQueries(us): %lu\nQueries Thput: %lf\n", numQueries, queryTimeUs, (1.0*numQueries)/(queryTimeUs));
   fprintf(microbench_file,"Size(B): %lu Size(MB): %lf\n", sizeBytes, sizeBytes/(1024.0 * 1024.0));;
@@ -104,10 +119,18 @@ int run_benchmark(BenchmarkParams params) {
   std::string output_file = params.output_file + ".csv";
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
+  bool sortAndInsertFingerprints = params.sortAndInsertFingerprints;
+
+  int isPhasedTest = params.isPhasedTest;
+  bool startWithAdversarialPhase = params.startWithAdversarialPhase;
+  int numPhases = params.numPhases;
+  int num_rounds_per_phase = numRounds / numPhases;
+
 
 #ifdef PERF
-  double sampleRate = 0.9;
+  double sampleRate = 1.0;
   uint64_t sampleThreshold = INT_MAX * sampleRate;
+  printf("sampleThreshold: %lu", sampleThreshold);
   std::vector<uint64_t> fp_miss_latencies;
   std::unordered_map<uint64_t, uint64_t> fp_freq;
   std::vector<uint64_t> adapt_latencies;
@@ -118,7 +141,7 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(
       rounds_file,
       "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
-      "round_adapts cumulative_adapts load_factor\n");
+      "round_adapts cumulative_adapts load_factor adaptMA nonAdaptMA\n");
 
   int ret = 0;
   ret = qf.construct(params);
@@ -128,11 +151,12 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(stderr, "Sorting keys\n");
   if (shouldSort) std::sort(insertSet, insertSet + numInserts);
   fprintf(stderr, "Beginning bulkLoad\n");
-  auto insert_start = std::chrono::high_resolution_clock::now();
-  ret = qf.bulkLoad(insertSet, numInserts);
-  auto insert_end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::micro> insert_duration =
-        insert_end - insert_start;
+  auto filter_insert_start = std::chrono::high_resolution_clock::now();
+  auto system_insert_start = std::chrono::high_resolution_clock::now();
+  ret = qf.bulkLoad(insertSet, numInserts );
+  auto filter_insert_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> filter_insert_duration =
+        filter_insert_end - filter_insert_start;
 
   if (ret < 0) {
     abort();
@@ -145,6 +169,10 @@ int run_benchmark(BenchmarkParams params) {
     db.insertKV(insertSet[i], insertSet[i], 0);
   }
   db.close();
+  auto system_insert_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::micro> system_insert_duration =
+        system_insert_end - system_insert_start;
+
   fprintf(stderr, "Done. starting test\n");
   db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/);
 
@@ -157,8 +185,21 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t cur_adv_query = 0;
   uint64_t adv_query_size = 0;
 
+  if (isPhasedTest && startWithAdversarialPhase) {
+    is_adversarial = 0; // Round 0 will switch it to adversarial
+  } else if (isPhasedTest) {
+    is_adversarial = 1;
+  }
+
   auto bench_start = std::chrono::high_resolution_clock::now();
   for (uint32_t r = 0; r < numRounds; r++) {
+    if (isPhasedTest) {
+      if (r % num_rounds_per_phase == 0) {
+        is_adversarial = 1 - is_adversarial;
+        printf("Round %d is_adversarial: %d\n", r, is_adversarial);
+      }
+    }
+
     auto round_start = std::chrono::high_resolution_clock::now();
     uint64_t roundFpCount = 0;
     uint64_t roundAdaptCount = 0;
@@ -179,20 +220,20 @@ int run_benchmark(BenchmarkParams params) {
 #endif
       qf.queryFilter(queryKey, &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
-        if (is_adversarial && queryIdx % adversarial_freq != 0) {
+        if ((is_adversarial || isPhasedTest) && queryIdx % adversarial_freq != 0) {
           adv_queries[adv_query_size] = queryKey;
           adv_query_size++;
         }
 #ifdef PERF
         fp_freq[queryKey]++;
         bool sampleQuery = rand() < sampleThreshold;
-        if (sampleQuery && r==0) {
+        if (sampleQuery) {
           dbQueryStart = std::chrono::high_resolution_clock::now();
         }
 #endif
         int dbQueryResult = db.searchKV(queryKey);
 #ifdef PERF
-        if (sampleQuery && r==0) {
+        if (sampleQuery) {
           dbQueryEnd = std::chrono::high_resolution_clock::now();
           uint64_t timeElapsed = (dbQueryEnd - dbQueryStart).count();
           fp_miss_latencies.push_back(timeElapsed);
@@ -203,13 +244,13 @@ int run_benchmark(BenchmarkParams params) {
           fpCount++;
           roundFpCount++;
 #ifdef PERF
-          if (sampleQuery && r==0) {
+          if (sampleQuery) {
             adaptStart = std::chrono::high_resolution_clock::now();
           }
 #endif
           int adaptRetCode = qf.adapt(queryKey, &qfFilterQueryResult);
 #ifdef PERF
-          if (sampleQuery && r==0) {
+          if (sampleQuery) {
             adaptEnd = std::chrono::high_resolution_clock::now();
             adapt_latencies.push_back((adaptEnd - adaptStart).count());
           }
@@ -235,7 +276,7 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -245,10 +286,13 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor());
+        qf.loadFactor(),
+        qf.getAdaptiveMACost(),
+        qf.getNonAdaptiveMACost()
+        );
     fprintf(
         stdout,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -258,7 +302,10 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor());
+        qf.loadFactor(),
+        qf.getAdaptiveMACost(),
+        qf.getNonAdaptiveMACost()
+        );
   }
 #ifdef PERF
   std::string latency_file_name = params.output_file + "_latency.csv";
@@ -267,8 +314,9 @@ int run_benchmark(BenchmarkParams params) {
   std::string fp_stats_file = params.output_file + "_fp_stats.csv";
   write_fp_stats_to_file(fp_stats_file.c_str(), fp_freq);
 #endif
-  db.close();
   printf("Done with the test\n");
+  db.close();
+  printf("Close DB\n");
 
 // Run Microbenchmarks with only in-memory operations at end of the load test
 {
@@ -293,31 +341,10 @@ int run_benchmark(BenchmarkParams params) {
   std::chrono::duration<double, std::micro> tp_overall_duration =
         tp_query_end - tp_query_start;
 
-  #if 0
-// Negative queries: Query false positives again, but only measure the throughput.
-  uint64_t numFp=0;
-  auto fp_query_start = std::chrono::high_resolution_clock::now();
-  for (uint64_t i=0; i < numQueries; i++) {
-      qf.queryFilter(querySet[i], &qfFilterQueryResult);
-      if (qfFilterQueryResult.key_present) numFp++;
-  }
-  auto fp_query_end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::micro> fp_overall_duration =
-        fp_query_end - fp_query_start;
-  #endif
   }
 
   {
   // Force the filter to adapt to get it to 95% load factor.
-  #if 0
-  auto fp_query_start = std::chrono::high_resolution_clock::now();
-  for (uint64_t i=0; i < numQueries; i++) {
-      qf.queryFilter(querySet[i], &qfFilterQueryResult);
-      if (qfFilterQueryResult.key_present) {
-        qf.adapt(querySet[i], &qfFilterQueryResult);
-      }
-  }
-  #endif
 
 // True queries: Query the insert set.
   auto tp_query_start = std::chrono::high_resolution_clock::now();
@@ -348,7 +375,7 @@ int run_benchmark(BenchmarkParams params) {
   std::chrono::duration<double, std::micro> fp_overall_duration =
         fp95_query_end - fp95_query_start;
   std::string micro_file_name = params.output_file + "_summary.csv";
-  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), insert_duration.count(), qf.loadFactor(), overall_fpr, qf.sizeInBytes());
+  write_microbench_to_file(micro_file_name.c_str(), numInserts, tp_overall_duration.count(), numQueries, fp_overall_duration.count(), filter_insert_duration.count(), system_insert_duration.count(), qf.loadFactor(), overall_fpr, qf.sizeInBytes());
   }
   qf.close();
   return 0;
@@ -395,6 +422,10 @@ int run_benchmark_with_storage_engine(
     ret = run_benchmark<DbStorageEngine, SampleDetectAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
+  if (filterType == "contDetect") {
+    ret = run_benchmark<DbStorageEngine, ContDetectAdaptiveFilter<ReverseMapEngine>>(
+        params);
+  }
   #endif
   return ret;
 }
@@ -420,7 +451,7 @@ int main(int argc, char **argv) {
       cxxopts::value<int>()->default_value("5"))(
 
       "queryWorkload",
-      "uniform, false-positive, zipfian, adversarial",
+      "uniform, false-positive, zipfian, adversarial,cyclic",
       cxxopts::value<std::string>()->default_value("false-positive"))(
 
       "filter",
@@ -432,7 +463,7 @@ int main(int argc, char **argv) {
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
       "reverseMapEngine",
-      "splinterDB, wiredTiger",
+      "splinterDB, wiredTiger,wiredTigerLsm",
       cxxopts::value<std::string>()->default_value("splinterDB"))(
 
       "storageCacheSizeMB",
@@ -455,13 +486,33 @@ int main(int argc, char **argv) {
       "Use a mock DB and main-memory operations",
       cxxopts::value<bool>()->default_value("false"))(
 
+      "sortAndInsertFingerprints",
+      "Sort all fingerprints before inserting into reverse map, speeds up wiredTiger as reverse map creation",
+      cxxopts::value<bool>()->default_value("true"))(
+
+      "sortAndInsertKeys",
+      "Sort Keys before inserting into reverse map, speeds up wiredTiger inserts in DB",
+      cxxopts::value<bool>()->default_value("true"))(
+
       "dbStats",
       "Collect DB Stats (WiredTiger)",
       cxxopts::value<bool>()->default_value("false"))(
 
       "advFreq",
       "adversarialFreq",
-      cxxopts::value<int>()->default_value("5"));
+      cxxopts::value<int>()->default_value("5"))(
+
+      "phasedTest",
+      "Run phased test that alternates between adversarial and workload mode",
+      cxxopts::value<bool>()->default_value("false"))(
+
+      "startWithAdversarialPhase",
+      "Starts with Adversarial phase in phased test",
+      cxxopts::value<bool>()->default_value("false"))(
+
+      "numPhases",
+      "Number of adversarial phase switches in Cyclic test",
+      cxxopts::value<int>()->default_value("1"));
 
 
   auto result = options.parse(argc, argv);
@@ -479,15 +530,26 @@ int main(int argc, char **argv) {
   std::string storageEngine = result["storageEngine"].as<std::string>();
   std::string reverseMapEngine = result["reverseMapEngine"].as<std::string>();
   bool microBench = result["microBench"].as<bool>();
-  bool shouldSort = !microBench;
+  bool sortAndInsertFingerprints = result["sortAndInsertFingerprints"].as<bool>();
+  bool shouldSort = result["sortAndInsertKeys"].as<bool>();
   bool shouldCollectDbStats = result["dbStats"].as<bool>();
+  bool isPhasedTest = result["phasedTest"].as<bool>();
+  bool startWithAdversarialPhase = result["startWithAdversarialPhase"].as<bool>();
+  int numPhases = result["numPhases"].as<int>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
   uint64_t *querySet;
 
+  if (microBench) {
+    shouldSort = false;
+  }
+
 
   std::cout << "Testing filter: " << filterType
-            << " with workload: " << queryWorkload << std::endl;
+            << " with workload: " << queryWorkload 
+            << " startWithAdversarialPhase " << startWithAdversarialPhase
+            << " sortAndInsertFingerprints " << sortAndInsertFingerprints
+            << std::endl;
 
   uint64_t minirun_bitmask = (1ULL << qbits + rbits) - 1;
   QFilterConfig qfConfig;
@@ -550,10 +612,16 @@ int main(int argc, char **argv) {
   params.storageCacheSizeMB = storageCacheSizeMB;
   params.reverseMapCacheSizeMB = reverseMapCacheSizeMB;
   params.shouldSort = shouldSort;
-    
+  params.isPhasedTest  = isPhasedTest;
+  params.numPhases = numPhases;
+  params.startWithAdversarialPhase = startWithAdversarialPhase;
+  params.sortAndInsertFingerprints = sortAndInsertFingerprints;
+
+  
   if (queryWorkload == "adversarial") {
     params.is_adversarial = 1;
   }
+  // For cyclic workloads, the benchmark will handle dynamically changing is_adversarial.
 
   int ret = -1;
   if (microBench) {
@@ -564,7 +632,7 @@ int main(int argc, char **argv) {
       storageEngine == "splinterDB" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         SplinterDBBackingStore,
-        WiredTigerBackingStore>(filterType, params);
+        WiredTigerReverseMap>(filterType, params);
   } else if (
       storageEngine == "splinterDB" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
@@ -574,7 +642,12 @@ int main(int argc, char **argv) {
       storageEngine == "wiredTiger" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
-        WiredTigerBackingStore>(filterType, params);
+        WiredTigerReverseMap>(filterType, params);
+  } else if (
+      storageEngine == "wiredTiger" && reverseMapEngine == "wiredTigerLsm") {
+    ret = run_benchmark_with_storage_engine<
+        WiredTigerBackingStore,
+        WiredTigerReverseMapLsm>(filterType, params);
   } else if (
       storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<

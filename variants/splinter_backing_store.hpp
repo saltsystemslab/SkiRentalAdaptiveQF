@@ -16,9 +16,14 @@ public:
     
     if (clearOld) {
       remove(splinterdb_cfg.filename);
-    }
-    if (splinterdb_create(&splinterdb_cfg, &db)) {
-      return -1;
+      if (splinterdb_create(&splinterdb_cfg, &db)) {
+        return -1;
+      }
+    } else {
+      splinterdb_close(&db);
+      if (splinterdb_open(&splinterdb_cfg, &db)) {
+        return -1;
+      }
     }
     splinterdb_lookup_result_init(db, &db_result, 0, NULL);
     this->quotient_remainder_bits = quotient_remainder_bits;
@@ -57,6 +62,21 @@ public:
         0);
   }
 
+  int insertAndCommitFingerprint(uint64_t fingerprint, int rank, uint64_t key) {
+    int isUpdate = (rank > 0);
+    uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
+    uint64_t queryFingerprint = (fingerprint & minirunBitmask)
+                                << (64 - quotient_remainder_bits);
+    return db_insert(
+        db,
+        &queryFingerprint,
+        sizeof(queryFingerprint),
+        &key,
+        sizeof(key),
+        isUpdate,
+        0);
+  }
+
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     uint64_t queryFingerprint = (fingerprint & minirunBitmask)
@@ -78,7 +98,9 @@ public:
   }
 
   int close() { return 0; }
-  void commitFingerprints() {}
+  void commitFingerprints() {
+    // SplinterDB uses write-buffering, so no need for bulk commit.
+  }
 
 private:
   data_config data_cfg;

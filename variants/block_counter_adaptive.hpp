@@ -46,8 +46,13 @@ public:
       if (ret < 0) {
         return -1;
       }
-      ret = reverseMap.insertFingerprint(
+      if (benchmarkParams.sortAndInsertFingerprints) {
+        ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
+      } else {
+        ret = reverseMap.insertAndCommitFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      }
       if (ret) {
         return -1;
       }
@@ -116,6 +121,14 @@ public:
   int close() {
     reverseMap.close();
     return 0;
+  }
+
+  double getAdaptiveMACost() {
+    return 0.0;
+  }
+
+  double getNonAdaptiveMACost() {
+    return 0.0;
   }
 
 private:

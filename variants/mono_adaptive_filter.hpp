@@ -9,6 +9,22 @@ extern "C" {
 #include "include/test_driver.h"
 }
 
+#ifdef PERF
+void printBulkLoadProgressBar(int current, int total, int barWidth = 50) {
+    float progress = (float)current / total;
+    int pos = barWidth * progress;
+    
+    std::cout << "[";
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << "%\r";
+    std::cout.flush();
+}
+#endif
+
 template <typename ReverseMap> class MonotonicAdaptiveFilter {
 public:
   int construct(BenchmarkParams params) {
@@ -33,6 +49,9 @@ public:
   int bulkLoad(uint64_t *keys, uint64_t numKeys) {
     int count = 1;
     for (uint64_t i = 0; qf.metadata->noccupied_slots < numKeys; i++) {
+      #ifdef PERF
+      if (i % 1000000 == 0)printBulkLoadProgressBar(i, numKeys);
+      #endif
       // Insert key into filter.
       qf_insert_result result;
       result.minirun_rank = 0;
@@ -43,8 +62,15 @@ public:
       }
       uint64_t fingerprint = result.minirun_id;
       uint64_t value = keys[i];
-      ret =
-          reverseMap.insertFingerprint(fingerprint, result.minirun_rank, value);
+
+      if (benchParams.sortAndInsertFingerprints) {
+        ret = reverseMap.insertFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      } else {
+        ret = reverseMap.insertAndCommitFingerprint(
+          result.minirun_id, result.minirun_rank, keys[i]);
+      }
+
       if (ret < 0) {
         return -1;
       }
@@ -93,6 +119,14 @@ public:
 
   uint64_t sizeInBytes() {
     return qf.metadata->total_size_in_bytes;
+  }
+
+  double getAdaptiveMACost() {
+    return 0.0;
+  }
+
+  double getNonAdaptiveMACost() {
+    return 0.0;
   }
 
 private:

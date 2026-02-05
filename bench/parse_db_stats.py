@@ -21,7 +21,7 @@ def parse_json_file(path):
 
 testDir = sys.argv[1]
 
-filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect']
+filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect', 'contDetect']
 db_stats = {}
 db_stats_summary = []
 for filter in filters:
@@ -29,7 +29,7 @@ for filter in filters:
     stats_summary = {}
     stats_summary['name'] = filter
     stats_summary['block_manager_blocks_read'] = db_stats[filter]['wiredTiger.block-manager.blocks read'].sum()
-    stats_summary['block_manager_bytes_read'] = db_stats[filter]['wiredTiger.block-manager.read'].sum()
+    stats_summary['block_manager_bytes_read'] = db_stats[filter]['wiredTiger.block-manager.bytes read'].sum()
     stats_summary['cache_bytes_read'] = db_stats[filter]['wiredTiger.cache.bytes read into cache'].sum()
     stats_summary['cache_pages_requested_from_cache'] = db_stats[filter]['wiredTiger.cache.pages requested from the cache'].sum()
     stats_summary['capacity_bytes_read'] = db_stats[filter]['wiredTiger.capacity.bytes read'].sum()
@@ -40,7 +40,7 @@ stats_summary = pd.DataFrame(db_stats_summary)
 stats_summary.to_csv('db_stats.csv')
 print(stats_summary)
 
-filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect']
+filters = ['adaptive', 'dSkiAdaptive', 'sampleDetect']
 rm_stats = {}
 rm_stats_summary = []
 for filter in filters:
@@ -48,7 +48,7 @@ for filter in filters:
     stats_summary = {}
     stats_summary['name'] = filter
     stats_summary['block_manager_blocks_read'] = rm_stats[filter]['wiredTiger.block-manager.blocks read'].sum()
-    stats_summary['block_manager_bytes_read'] = rm_stats[filter]['wiredTiger.block-manager.read'].sum()
+    stats_summary['block_manager_bytes_read'] = rm_stats[filter]['wiredTiger.block-manager.bytes read'].sum()
     stats_summary['cache_bytes_read'] = rm_stats[filter]['wiredTiger.cache.bytes read into cache'].sum()
     stats_summary['cache_pages_requested_from_cache'] = rm_stats[filter]['wiredTiger.cache.pages requested from the cache'].sum()
     stats_summary['capacity_bytes_read'] = rm_stats[filter]['wiredTiger.capacity.bytes read'].sum()
