@@ -20,24 +20,27 @@ mkdir -p $SPONGE_DIR
 
 DELAY_US=130
 # C_RM/C_DB = 1/2
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True storage_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True storage_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True storage_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 storage_delay_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True  storage_sleep_us=130
+
+exit
+
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True storage_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True storage_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_half with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=1 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 storage_sleep_us=${DELAY_US}
 
 DELAY_US=130
 #C_RM/C_DB=2
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 reverse_delay_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_twice with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=3 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 reverse_sleep_us=${DELAY_US}
 
 DELAY_US=390
 #C_RM/C_DB=2
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_delay_us=${DELAY_US}
-python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 reverse_delay_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/normal_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=normal break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/lognormal_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=lognormal break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True reverse_sleep_us=${DELAY_US}
+python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/zipf_delay_quad with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=zipfian break_even=5 collect_db_stats=True quotient_bits=27 capture_extra_stats=True zipf_constant=0.99 storage_cache_size_mb=64 reverse_sleep_us=${DELAY_US}
 
 # Distribution tests
 python3 ./bench/bench_filters.py  -F ${SPONGE_DIR}/uniform with num_queries=100000000 num_rounds=100 storage_engine=wiredTiger reverse_map_engine=wiredTiger query_workload=uniform break_even=2 collect_db_stats=True quotient_bits=27 capture_extra_stats=True

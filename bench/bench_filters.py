@@ -72,7 +72,7 @@ def run_filter_bench(
     is_insert_test,
     skip_db_parse,
     storage_sleep_us,
-    reverse_sleep_us
+    reverse_sleep_us,
 ):
     filters = all_filters
     if is_insert_test:
