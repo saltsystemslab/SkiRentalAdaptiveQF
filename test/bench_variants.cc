@@ -120,6 +120,8 @@ int run_benchmark(BenchmarkParams params) {
   int is_adversarial = params.is_adversarial;
   int adversarial_freq = params.adversarial_freq;
   bool sortAndInsertFingerprints = params.sortAndInsertFingerprints;
+  uint64_t storageSleepUs = params.storageSleepUs;
+  uint64_t reverseSleepUs = params.reverseSleepUs;
 
   int isPhasedTest = params.isPhasedTest;
   bool startWithAdversarialPhase = params.startWithAdversarialPhase;
@@ -163,7 +165,7 @@ int run_benchmark(BenchmarkParams params) {
   }
   DbStorageEngine db;
   fprintf(stderr, "Loading database\n");
-  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, false /*collectStats*/, true /* clear OldDB*/);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, false /*collectStats*/, true /* clear OldDB*/, 0 /* Sleep Delay */);
   for (uint64_t i = 0; i < numInserts; i++) {
     if (i % 1000000 == 0)printProgressBar(i, numInserts);
     db.insertKV(insertSet[i], insertSet[i], 0);
@@ -174,7 +176,7 @@ int run_benchmark(BenchmarkParams params) {
         system_insert_end - system_insert_start;
 
   fprintf(stderr, "Done. starting test\n");
-  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/);
+  db.init("database", qfConfig.qbits + qfConfig.rbits, params.storageCacheSizeMB, params.shouldCollectDbStats, false /* clear OldDB*/, storageSleepUs);
 
   QFilterQueryResult qfFilterQueryResult;
   uint64_t fpCount = 0;
@@ -474,6 +476,14 @@ int main(int argc, char **argv) {
       "Size of reverse map cache size in MB",
       cxxopts::value<uint64_t>()->default_value("64"))(
 
+      "storageSleepUs",
+      "Artificial sleep in microseconds to add to storage DB calls",
+      cxxopts::value<uint64_t>()->default_value("0"))(
+
+      "reverseSleepUs",
+      "Artificial sleep in microseconds to add to reverse map calls",
+      cxxopts::value<uint64_t>()->default_value("0"))(
+
       "numQueries",
       "Number of total queries ",
       cxxopts::value<uint64_t>()->default_value("20000"))(
@@ -522,6 +532,8 @@ int main(int argc, char **argv) {
   uint64_t numQueries = result["numQueries"].as<uint64_t>();
   uint64_t storageCacheSizeMB = result["storageCacheSizeMB"].as<uint64_t>();
   uint64_t reverseMapCacheSizeMB = result["reverseMapCacheSizeMB"].as<uint64_t>();
+  uint64_t storageSleepUs = result["storageSleepUs"].as<uint64_t>();
+  uint64_t reverseSleepUs = result["reverseSleepUs"].as<uint64_t>();
   int numRounds = result["numRounds"].as<int>();
   int advFreq = result["advFreq"].as<int>();
   int breakEven = result["breakEven"].as<int>();
@@ -616,6 +628,9 @@ int main(int argc, char **argv) {
   params.numPhases = numPhases;
   params.startWithAdversarialPhase = startWithAdversarialPhase;
   params.sortAndInsertFingerprints = sortAndInsertFingerprints;
+  params.storageSleepUs = storageSleepUs;
+  params.reverseSleepUs = reverseSleepUs;
+
 
   
   if (queryWorkload == "adversarial") {

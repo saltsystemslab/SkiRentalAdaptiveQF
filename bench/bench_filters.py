@@ -40,6 +40,8 @@ def test_config():
     skip_db_parse = False
     sort_and_insert_keys=True
     sort_and_insert_fingerprints=True
+    storage_sleep_us = 0
+    reverse_sleep_us = 0
 
 
 @ex.capture
@@ -68,7 +70,9 @@ def run_filter_bench(
     sort_and_insert_keys,
     sort_and_insert_fingerprints,
     is_insert_test,
-    skip_db_parse
+    skip_db_parse,
+    storage_sleep_us,
+    reverse_sleep_us,
 ):
     filters = all_filters
     if is_insert_test:
@@ -170,6 +174,8 @@ def run_filter_bench(
             "--storageEngine": storage_engine,
             "--reverseMapEngine": reverse_map_engine,
             "--storageCacheSizeMB": str(storage_cache_size_mb),
+            "--storageSleepUs": storage_sleep_us,
+            "--reverseSleepUS": reverse_sleep_us,
             "--advFreq": adv_freq,
             "--breakEven": break_even,
             "--numPhases": num_phases,

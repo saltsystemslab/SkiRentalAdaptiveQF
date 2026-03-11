@@ -28,7 +28,7 @@ public:
       return -1;
     }
     fullPoint = config.max_load_factor * num_slots;
-    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, params.reverseMapCacheSizeMB, false, true);
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, params.reverseMapCacheSizeMB, false, true, params.reverseSleepUs);
     breakEvenCount = config.breakEvenCount;
     return 0;
   }
@@ -68,7 +68,7 @@ public:
     }
     reverseMap.commitFingerprints();
     reverseMap.close();
-    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, benchmarkParams.reverseMapCacheSizeMB, benchmarkParams.shouldCollectDbStats, false);
+    reverseMap.init("reverseMap", qf.metadata->quotient_remainder_bits, benchmarkParams.reverseMapCacheSizeMB, benchmarkParams.shouldCollectDbStats, false, benchmarkParams.reverseSleepUs);
     return 0;
   }
 
