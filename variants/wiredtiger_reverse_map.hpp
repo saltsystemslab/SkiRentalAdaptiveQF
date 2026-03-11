@@ -2,10 +2,13 @@
 #define WT_REVERSE_MAP_H
 
 #include "wiredtiger.h"
+#include <thread>
+#include <chrono>
 
 class WiredTigerReverseMap {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld, uint64_t delayUs) {
+    this->queryDelayUs = delayUs;
     dbName = dbName + "_wiredTiger";
     if (std::filesystem::exists(dbName) && clearOld)
       std::filesystem::remove_all(dbName);
@@ -82,6 +85,9 @@ public:
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
+		if (queryDelayUs) {
+				std::this_thread::sleep_for(std::chrono::microseconds(queryDelayUs)); 
+		}
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     fingerprint = (fingerprint & minirunBitmask)
                   << (64 - quotient_remainder_bits);
@@ -110,6 +116,7 @@ private:
   const uint32_t buffer_pool_size_mb = 512;
   const uint32_t max_schema_len = 128;
   const uint32_t max_conn_config_len = 128;
+	uint64_t queryDelayUs;
 
   int quotient_remainder_bits;
 

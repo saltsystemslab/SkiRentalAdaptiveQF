@@ -2,10 +2,13 @@
 #define WT_BACKING_STORE_H
 
 #include "wiredtiger.h"
+#include <thread>
+#include <chrono>
 
 class WiredTigerBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld, uint64_t delayUs) {
+		this->queryDelayUs = delayUs;
     dbName = dbName + "_wiredTiger";
     if (std::filesystem::exists(dbName) && clearOld)
       std::filesystem::remove_all(dbName);
@@ -51,6 +54,9 @@ public:
   }
 
   int searchKV(uint64_t key) {
+		if (queryDelayUs) {
+				std::this_thread::sleep_for(std::chrono::microseconds(queryDelayUs)); 
+		}
     cursor->set_key(cursor, key);
     if (cursor->search(cursor) == WT_NOTFOUND) {
       return 0;
@@ -96,6 +102,7 @@ private:
   const uint32_t max_schema_len = 128;
   const uint32_t max_conn_config_len = 128;
   char *buf;
+	uint64_t queryDelayUs;
 
   int quotient_remainder_bits;
 

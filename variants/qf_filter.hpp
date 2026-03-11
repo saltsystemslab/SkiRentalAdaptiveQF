@@ -32,6 +32,8 @@ struct BenchmarkParams {
   bool shouldCollectDbStats;
   uint64_t storageCacheSizeMB;
   uint64_t reverseMapCacheSizeMB;
+  uint64_t storageSleepUs;
+  uint64_t reverseSleepUs;
   bool shouldSort;
   bool sortAndInsertFingerprints;
 };

@@ -1,6 +1,9 @@
 #ifndef SPLINTER_BACKING_STORE_H
 #define SPLINTER_BACKING_STORE_H
 
+#include <thread>
+#include <chrono>
+
 extern "C" {
 #include "include/splinter_util.h"
 #include "include/test_driver.h"
@@ -8,24 +11,29 @@ extern "C" {
 
 class SplinterDBBackingStore {
 public:
-  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld) {
+  int init(std::string dbName, int quotient_remainder_bits, int cache_size_mb, int collectStats, bool clearOld, uint64_t delayUs) {
+		this->queryDelayUs = delayUs;
     dbName = dbName + "_splinterDb";
     data_cfg = qf_data_config_init();
     splinterdb_cfg = qf_splinterdb_config_init(dbName.c_str(), &data_cfg);
     splinterdb_cfg.cache_size = cache_size_mb * Mega;
     
     if (clearOld) {
+      printf("Clearing old\n");
       remove(splinterdb_cfg.filename);
       if (splinterdb_create(&splinterdb_cfg, &db)) {
         return -1;
       }
+      splinterdb_lookup_result_init(db, &db_result, 0, NULL);
     } else {
+#if 0
+      printf("Closing and opening again\n");
       splinterdb_close(&db);
       if (splinterdb_open(&splinterdb_cfg, &db)) {
         return -1;
       }
+#endif
     }
-    splinterdb_lookup_result_init(db, &db_result, 0, NULL);
     this->quotient_remainder_bits = quotient_remainder_bits;
     if (collectStats) {
       fprintf(stderr, "SplinterDB does not support collecting stats\n");
@@ -42,6 +50,9 @@ public:
   }
 
   int searchKV(uint64_t key) {
+		if (queryDelayUs) {
+				std::this_thread::sleep_for(std::chrono::microseconds(queryDelayUs)); 
+		}
     slice db_query = padded_slice(&key, MAX_KEY_SIZE, sizeof(key), buffer, 0);
     splinterdb_lookup(db, db_query, &db_result);
     return splinterdb_lookup_found(&db_result);
@@ -78,6 +89,9 @@ public:
   }
 
   int getFingerprint(uint64_t fingerprint, int rank, uint64_t *value) {
+		if (queryDelayUs) {
+				std::this_thread::sleep_for(std::chrono::microseconds(queryDelayUs)); 
+		}
     uint64_t minirunBitmask = (1ULL << quotient_remainder_bits) - 1;
     uint64_t queryFingerprint = (fingerprint & minirunBitmask)
                                 << (64 - quotient_remainder_bits);
@@ -109,6 +123,7 @@ private:
   splinterdb_lookup_result db_result;
   char buffer[10 * MAX_VAL_SIZE];
   int quotient_remainder_bits;
+	uint64_t queryDelayUs;
 };
 
 #endif
