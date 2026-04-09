@@ -12,21 +12,17 @@
 #include "non_adaptive_filter.hpp"
 #else
 #include "dski_adaptive_filter.hpp"
-#include "repeat_detect_adaptive.hpp"
-#include "sample_detect_adaptive.hpp"
 #include "mono_adaptive_filter.hpp"
-#include "rski_adaptive_filter.hpp"
 #include "coin_flip_adaptive.hpp"
 #include "non_adaptive_filter.hpp"
-#include "block_counter_adaptive.hpp"
 #include "cont_detect_adaptive.hpp"
 #endif
 
-#include "splinter_backing_store.hpp"
-#include "dummy_backing_store.hpp"
-#include "wiredtiger_backing_store.hpp"
-#include "wiredtiger_reverse_map.hpp"
-#include "wiredtiger_reverse_map_lsm.hpp"
+#include "backing_store/splinter_backing_store.hpp"
+#include "backing_store/dummy_backing_store.hpp"
+#include "backing_store/wiredtiger_backing_store.hpp"
+#include "reverse_map/wiredtiger_reverse_map.hpp"
+#include "reverse_map/wiredtiger_reverse_map_lsm.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
     float progress = (float)current / total;
@@ -404,24 +400,8 @@ int run_benchmark_with_storage_engine(
     ret = run_benchmark<DbStorageEngine, DSkiAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
-  if (filterType == "rSkiAdaptive") {
-    ret = run_benchmark<DbStorageEngine, RSkiAdaptiveFilter<ReverseMapEngine>>(
-        params);
-  }
   if (filterType == "coinFlip") {
     ret = run_benchmark<DbStorageEngine, CoinFlipAdaptiveFilter<ReverseMapEngine>>(
-        params);
-  }
-  if (filterType == "blockCount") {
-    ret = run_benchmark<DbStorageEngine, BlockCounterAdaptiveFilter<ReverseMapEngine>>(
-        params);
-  }
-  if (filterType == "repeatDetect") {
-    ret = run_benchmark<DbStorageEngine, RepeatDetectAdaptiveFilter<ReverseMapEngine>>(
-        params);
-  }
-  if (filterType == "sampleDetect") {
-    ret = run_benchmark<DbStorageEngine, SampleDetectAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
   if (filterType == "contDetect") {
