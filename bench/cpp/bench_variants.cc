@@ -18,11 +18,11 @@
 #include "hybrid_skiqf.hpp"
 #endif
 
-#include "backing_store/splinter_backing_store.hpp"
-#include "backing_store/dummy_backing_store.hpp"
-#include "backing_store/wiredtiger_backing_store.hpp"
-#include "reverse_map/wiredtiger_reverse_map.hpp"
-#include "reverse_map/wiredtiger_reverse_map_lsm.hpp"
+#include "db/splinter_db.hpp"
+#include "db/mock_db.hpp"
+#include "db/wiredtiger_backing_store.hpp"
+#include "db/wiredtiger_reverse_map.hpp"
+#include "db/wiredtiger_reverse_map_lsm.hpp"
 
 void printProgressBar(int current, int total, int barWidth = 50) {
     float progress = (float)current / total;
@@ -229,7 +229,7 @@ int run_benchmark(BenchmarkParams params) {
           dbQueryStart = std::chrono::high_resolution_clock::now();
         }
 #endif
-        int dbQueryResult = db.searchKV(queryKey);
+        int dbQueryResult = db.lookupKey(queryKey);
 #ifdef PERF
         if (sampleQuery) {
           dbQueryEnd = std::chrono::high_resolution_clock::now();
@@ -614,18 +614,18 @@ int main(int argc, char **argv) {
   int ret = -1;
   if (microBench) {
     ret = run_benchmark_with_storage_engine<
-        DummyDBBackingStore,
-        DummyDBBackingStore>(filterType, params);
+        MockDB,
+        MockDB>(filterType, params);
   } else if (
       storageEngine == "splinterDB" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
-        SplinterDBBackingStore,
+        SplinterDB,
         WiredTigerReverseMap>(filterType, params);
   } else if (
       storageEngine == "splinterDB" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
-        SplinterDBBackingStore,
-        SplinterDBBackingStore>(filterType, params);
+        SplinterDB,
+        SplinterDB>(filterType, params);
   } else if (
       storageEngine == "wiredTiger" && reverseMapEngine == "wiredTiger") {
     ret = run_benchmark_with_storage_engine<
@@ -640,7 +640,7 @@ int main(int argc, char **argv) {
       storageEngine == "wiredTiger" && reverseMapEngine == "splinterDB") {
     ret = run_benchmark_with_storage_engine<
         WiredTigerBackingStore,
-        SplinterDBBackingStore>(filterType, params);
+        SplinterDB>(filterType, params);
   }
   if (ret) {
     std::cout << "Test failed" << std::endl;
