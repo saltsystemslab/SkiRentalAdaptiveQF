@@ -9,13 +9,13 @@
 #include "qf_filter.hpp"
 
 #if USE_CQF
-#include "non_adaptive_filter.hpp"
+#include "cqf.hpp"
 #else
-#include "dski_adaptive_filter.hpp"
-#include "mono_adaptive_filter.hpp"
+#include "skiqf.hpp"
+#include "adaptiveqf.hpp"
 #include "coin_flip_adaptive.hpp"
-#include "non_adaptive_filter.hpp"
-#include "cont_detect_adaptive.hpp"
+#include "cqf.hpp"
+#include "hybrid_skiqf.hpp"
 #endif
 
 #include "backing_store/splinter_backing_store.hpp"
@@ -139,7 +139,7 @@ int run_benchmark(BenchmarkParams params) {
   fprintf(
       rounds_file,
       "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
-      "round_adapts cumulative_adapts load_factor adaptMA nonAdaptMA\n");
+      "round_adapts cumulative_adapts load_factor\n");
 
   int ret = 0;
   ret = qf.construct(params);
@@ -274,7 +274,7 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -284,13 +284,11 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor(),
-        qf.getAdaptiveMACost(),
-        qf.getNonAdaptiveMACost()
+        qf.loadFactor()
         );
     fprintf(
         stdout,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f %f %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -300,9 +298,7 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor(),
-        qf.getAdaptiveMACost(),
-        qf.getNonAdaptiveMACost()
+        qf.loadFactor()
         );
   }
 #ifdef PERF
@@ -385,27 +381,27 @@ int run_benchmark_with_storage_engine(
   int ret = -1;
   #if USE_CQF
   if (filterType == "nonAdaptive") {
-    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<ReverseMapEngine>>(params);
   }
   #else
   if (filterType == "nonAdaptive") {
-    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter>(params);
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<ReverseMapEngine>>(params);
   }
   if (filterType == "adaptive") {
     ret = run_benchmark<
         DbStorageEngine,
-        MonotonicAdaptiveFilter<ReverseMapEngine>>(params);
+        AdaptiveQF<ReverseMapEngine>>(params);
   }
-  if (filterType == "dSkiAdaptive") {
-    ret = run_benchmark<DbStorageEngine, DSkiAdaptiveFilter<ReverseMapEngine>>(
+  if (filterType == "skiQF") {
+    ret = run_benchmark<DbStorageEngine, SkiQF<ReverseMapEngine>>(
         params);
   }
   if (filterType == "coinFlip") {
     ret = run_benchmark<DbStorageEngine, CoinFlipAdaptiveFilter<ReverseMapEngine>>(
         params);
   }
-  if (filterType == "contDetect") {
-    ret = run_benchmark<DbStorageEngine, ContDetectAdaptiveFilter<ReverseMapEngine>>(
+  if (filterType == "hybridSkiQF") {
+    ret = run_benchmark<DbStorageEngine, HybridSkiQF<ReverseMapEngine>>(
         params);
   }
   #endif
@@ -437,7 +433,7 @@ int main(int argc, char **argv) {
       cxxopts::value<std::string>()->default_value("false-positive"))(
 
       "filter",
-      "nonAdaptive, MonoAdaptive, DSki, RSki",
+      "nonAdaptive, adaptive, skiQF, hybridSkiQF",
       cxxopts::value<std::string>()->default_value("nonAdaptive"))(
 
       "storageEngine",
@@ -543,7 +539,6 @@ int main(int argc, char **argv) {
             << " sortAndInsertFingerprints " << sortAndInsertFingerprints
             << std::endl;
 
-  uint64_t minirun_bitmask = (1ULL << qbits + rbits) - 1;
   QFilterConfig qfConfig;
   qfConfig.qbits = qbits;
   qfConfig.rbits = rbits;
@@ -560,7 +555,6 @@ int main(int argc, char **argv) {
     fprintf(stdout, "numKeys in insertSet %lu\n", numKeys);
     numInserts = numKeys;
     insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
-    char *buf = (char *)insertSet;
     off_t offset = 0;
     while (offset < numKeys * sizeof(uint64_t)) {
       ssize_t bytes_read = pread(fd, insertSet + offset, numKeys * sizeof(uint64_t), offset + sizeof(uint64_t));
@@ -580,10 +574,9 @@ int main(int argc, char **argv) {
     numQueries = numKeys;
     querySet = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
 
-    char *buf = (char *)querySet;
     off_t offset = 0;
     while (offset < numKeys * sizeof(uint64_t)) {
-      ssize_t bytes_read = pread(fd, buf+ offset, numKeys * sizeof(uint64_t), offset + sizeof(uint64_t));
+      ssize_t bytes_read = pread(fd, querySet+ offset, numKeys * sizeof(uint64_t), offset + sizeof(uint64_t));
       offset += bytes_read;
       fprintf(stdout, "%lu\n", offset);
     }

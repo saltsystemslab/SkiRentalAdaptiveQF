@@ -11,7 +11,7 @@ work_dir = './sponge'
 exe_dir = './build' # KEEP in SYNC with the Makefile. All exe are run with cwd=work_dir
 build_log_dir = './sponge'
 
-all_filters = ["adaptive", "nonAdaptive", "dSkiAdaptive", "sampleDetect", "contDetect"]
+all_filters = ["adaptive", "nonAdaptive", "skiQF", "hybridSkiQF"]
 
 
 @ex.config
@@ -143,11 +143,6 @@ def run_filter_bench(
             build_cmd = (
                 "make clean && make bench_variants" + extra_build_flags # ADD USE_CQF=1 if you want to use original CQF code.
             )
-        elif filter == "blockCount":
-            build_cmd = (
-                "make clean && make bench_variants SEVEN_BIT_OFFSET=1"
-                + extra_build_flags
-            )
         else:
             build_cmd = "make clean && make bench_variants" + extra_build_flags
 
@@ -175,7 +170,7 @@ def run_filter_bench(
             "--reverseMapEngine": reverse_map_engine,
             "--storageCacheSizeMB": str(storage_cache_size_mb),
             "--storageSleepUs": storage_sleep_us,
-            "--reverseSleepUS": reverse_sleep_us,
+            "--reverseSleepUs": reverse_sleep_us,
             "--advFreq": adv_freq,
             "--breakEven": break_even,
             "--numPhases": num_phases,
