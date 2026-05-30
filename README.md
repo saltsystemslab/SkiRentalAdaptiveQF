@@ -1,17 +1,21 @@
-# Ski-Rental Augmented Adaptive Filters
+# Ski-Rental Augmented Adaptive Filter
 
-This repository extends the Adaptive Quotient Filter (AQF) to adapt only if a false positive exceeds a threshold.
-The threshold is determined by applying a ski-rental analysis on the false-positive detection (renting) and adaptation (buying) costs.  
+Implementation of online adaptive quotient filters: approximate membership data structures that can learn from false positives when it is worth the I/O cost.
 
-The filters are provided in two variants
+Adaptive filters fix the problem of high observed false positive rates on skewed workloads by learning from repeated false positives. However, adaptivity increases the disk I/O overhead of a false positive, degrading throughput on workloads with no repeated false positives.
 
-* SkiQF (variants/dski_adaptive.hpp)
-* SampledSkiQF(variants/sample_detect_adaptive.hpp)
+Unlike adaptive filters that adapt on every detected false positive, online adaptive filters make an online decision on whether adaptation is worth the cost.
 
-The SkiQF is the more robust version of two, and guarantees a 2-competitive performance on the total I/O.
-The SampledSkiQF uses a sampling phase to determine whether it is optimal to adapt immediately or not. 
+This repository extends the Adaptive Quotient Filter (AQF) with two online-adaptive filter designs:
 
-For code-samples on how to use the filters, please refer to `test/bench_variants.cc`. 
+| Variant | File | Description |
+|---|---|---|
+| **SkiQF** | [`variants/skiqf.hpp`](variants/skiqf.hpp) | Applies ski-rental analysis to the adapt/tolerate decision. Guaranteed 2-competitive on total I/O. |
+| **HybridSkiQF** | [`variants/hybrid_skiqf.hpp`](variants/hybrid_skiqf.hpp) | Hybrid variant combining SkiQF with additional heuristics. |
+
+All variants extend [`BaseAdaptiveFilter`](variants/base_adaptive_filter.hpp) and share a common query/adapt interface.
+
+For code-samples on how to use the filters, please refer to [`bench_variants.cc`](bench/cpp/bench_variants.cc). 
 
 
 Experiments
@@ -20,7 +24,9 @@ Experiments
 The experiments run in our paper can be triggered by the running the test script.
 
 ```bash
- $ ./run_tests
+$ ./setup.sh   # builds external dependencies (SplinterDB, WiredTiger)
+$ ./run_tests
 ```
-The script will run the experiments and output the results in the directory `./paper`. Each experiment will output its result in a sub-directory under `./paper`.
+
+Runs the full experiment suite from the paper. Results are written to ./paper/<experiment-name>/.
 
