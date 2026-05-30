@@ -1,4 +1,4 @@
-# Ski-Rental Augmented Adaptive Filter
+# Online Adaptive Filters
 
 Implementation of online adaptive quotient filters: approximate membership data structures that can learn from false positives when it is worth the I/O cost.
 
