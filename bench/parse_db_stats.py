@@ -1,60 +1,114 @@
-import os
-import sys
+import csv
 import json
-import pandas as pd
+import sys
+from pathlib import Path
+
+
+DB_FILTERS = ["adaptive", "nonAdaptive", "skiQF", "hybridSkiQF"]
+REVERSE_MAP_FILTERS = ["adaptive", "skiQF", "hybridSkiQF"]
+
+STAT_FIELDS = {
+    "block_manager_blocks_read": ("block-manager", "blocks read"),
+    "block_manager_bytes_read": ("block-manager", "bytes read"),
+    "cache_bytes_read": ("cache", "bytes read into cache"),
+    "cache_pages_requested_from_cache": (
+        "cache",
+        "pages requested from the cache",
+    ),
+    "capacity_bytes_read": ("capacity", "bytes read"),
+    "connection_read_ios": ("connection", "total read I/Os"),
+}
+
 
 def parse_json_file(path):
-    jsonObj = {}
-    data = ''
-    with open(path) as f:
-        for l in f.readlines():
-            data = data + l
+    """Return the final cumulative snapshot from a WiredTiger statistics log."""
+    data = path.read_text()
+    decoder = json.JSONDecoder()
+    offset = 0
+    final_snapshot = None
 
-        decoder = json.JSONDecoder()
-        while data:
-            value, new_start = decoder.raw_decode(data)
-            data = data[new_start:].strip()
-            jsonObj=value
-    return jsonObj
+    while offset < len(data):
+        while offset < len(data) and data[offset].isspace():
+            offset += 1
+        if offset == len(data):
+            break
+        final_snapshot, offset = decoder.raw_decode(data, offset)
+
+    if final_snapshot is None:
+        raise ValueError(f"No JSON statistics found in {path}")
+    return final_snapshot
 
 
+def summarize_stats(path, filter_name):
+    snapshot = parse_json_file(path)
+    wiredtiger_stats = snapshot["wiredTiger"]
+    summary = {"name": filter_name}
+    for output_name, (category, metric) in STAT_FIELDS.items():
+        summary[output_name] = wiredtiger_stats[category][metric]
+    return summary
 
-testDir = sys.argv[1]
 
-filters = ['adaptive', 'dSkiAdaptive', 'nonAdaptive', 'sampleDetect', 'contDetect']
-db_stats = {}
-db_stats_summary = []
-for filter in filters:
-    db_stats[filter] = pd.json_normalize(parse_json_file(os.path.join(testDir, filter + '_db_stats.json')))
-    stats_summary = {}
-    stats_summary['name'] = filter
-    stats_summary['block_manager_blocks_read'] = db_stats[filter]['wiredTiger.block-manager.blocks read'].sum()
-    stats_summary['block_manager_bytes_read'] = db_stats[filter]['wiredTiger.block-manager.bytes read'].sum()
-    stats_summary['cache_bytes_read'] = db_stats[filter]['wiredTiger.cache.bytes read into cache'].sum()
-    stats_summary['cache_pages_requested_from_cache'] = db_stats[filter]['wiredTiger.cache.pages requested from the cache'].sum()
-    stats_summary['capacity_bytes_read'] = db_stats[filter]['wiredTiger.capacity.bytes read'].sum()
-    stats_summary['connection_read_ios'] = db_stats[filter]['wiredTiger.connection.total read I/Os'].sum()
-    db_stats_summary.append(stats_summary)
+def write_group_summary(test_dir, filters, input_suffix, output_name):
+    input_paths = {
+        filter_name: test_dir / f"{filter_name}_{input_suffix}.json"
+        for filter_name in filters
+    }
+    present_paths = {
+        filter_name: path
+        for filter_name, path in input_paths.items()
+        if path.is_file()
+    }
 
-stats_summary = pd.DataFrame(db_stats_summary)
-stats_summary.to_csv('db_stats.csv')
-print(stats_summary)
+    if not present_paths:
+        return None
 
-filters = ['adaptive', 'dSkiAdaptive', 'sampleDetect']
-rm_stats = {}
-rm_stats_summary = []
-for filter in filters:
-    rm_stats[filter] = pd.json_normalize(parse_json_file(testDir + '/' + filter + '_rm_stats.json'))
-    stats_summary = {}
-    stats_summary['name'] = filter
-    stats_summary['block_manager_blocks_read'] = rm_stats[filter]['wiredTiger.block-manager.blocks read'].sum()
-    stats_summary['block_manager_bytes_read'] = rm_stats[filter]['wiredTiger.block-manager.bytes read'].sum()
-    stats_summary['cache_bytes_read'] = rm_stats[filter]['wiredTiger.cache.bytes read into cache'].sum()
-    stats_summary['cache_pages_requested_from_cache'] = rm_stats[filter]['wiredTiger.cache.pages requested from the cache'].sum()
-    stats_summary['capacity_bytes_read'] = rm_stats[filter]['wiredTiger.capacity.bytes read'].sum()
-    stats_summary['connection_read_ios'] = rm_stats[filter]['wiredTiger.connection.total read I/Os'].sum()
-    rm_stats_summary.append(stats_summary)
+    missing_filters = sorted(set(filters) - set(present_paths))
+    if missing_filters:
+        raise FileNotFoundError(
+            f"Missing {input_suffix} statistics for: {', '.join(missing_filters)}"
+        )
 
-stats_summary = pd.DataFrame(rm_stats_summary)
-stats_summary.to_csv('rm_stats.csv')
-print(stats_summary)
+    rows = [
+        summarize_stats(present_paths[filter_name], filter_name)
+        for filter_name in filters
+    ]
+    output_path = test_dir / output_name
+    with output_path.open("w", newline="") as output_file:
+        writer = csv.DictWriter(
+            output_file,
+            fieldnames=["name", *STAT_FIELDS.keys()],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"Wrote {output_path}")
+    return output_path
+
+
+def main(argv):
+    if len(argv) != 2:
+        raise SystemExit(f"Usage: {argv[0]} <benchmark-work-directory>")
+
+    test_dir = Path(argv[1])
+    if not test_dir.is_dir():
+        raise NotADirectoryError(test_dir)
+
+    db_output = write_group_summary(
+        test_dir,
+        DB_FILTERS,
+        "db_stats",
+        "db_stats.csv",
+    )
+    reverse_map_output = write_group_summary(
+        test_dir,
+        REVERSE_MAP_FILTERS,
+        "rm_stats",
+        "rm_stats.csv",
+    )
+
+    if db_output is None and reverse_map_output is None:
+        raise FileNotFoundError(f"No WiredTiger statistics found in {test_dir}")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

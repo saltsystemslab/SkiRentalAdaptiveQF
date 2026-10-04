@@ -1,7 +1,10 @@
-from tqdm import tqdm
-from sacred import Experiment
+import glob
 import os
+import shutil
 import subprocess
+
+from sacred import Experiment
+from tqdm import tqdm
 
 # TODO(Chesetti): Lot's of hardcoded variables. Move them to strings.
 
@@ -12,6 +15,27 @@ exe_dir = './build' # KEEP in SYNC with the Makefile. All exe are run with cwd=w
 build_log_dir = './sponge'
 
 all_filters = ["adaptive", "nonAdaptive", "skiQF", "hybridSkiQF"]
+
+
+def storage_cache_for_filter(filter_name, storage_cache_size_mb, reverse_map_cache_size_mb):
+    """Give every filter the same total external-memory cache budget."""
+    if filter_name == "nonAdaptive":
+        return storage_cache_size_mb + reverse_map_cache_size_mb
+    return storage_cache_size_mb
+
+
+def collect_wiredtiger_stats(source_pattern, destination):
+    """Combine all WiredTiger statistics-log segments into one artifact."""
+    source_paths = sorted(glob.glob(source_pattern))
+    if not source_paths:
+        raise FileNotFoundError(
+            f"No WiredTiger statistics files matched {source_pattern}"
+        )
+
+    with open(destination, "wb") as destination_file:
+        for source_path in source_paths:
+            with open(source_path, "rb") as source_file:
+                shutil.copyfileobj(source_file, destination_file)
 
 
 @ex.config
@@ -31,6 +55,9 @@ def test_config():
     hash_again_for_zipfian = True
     capture_extra_stats = False
     storage_cache_size_mb = 64
+    # SplinterDB requires a larger cache. Paper runs using WiredTiger override
+    # this to 4 MB; the Table 1 engine comparison keeps both engines at 64 MB.
+    reverse_map_cache_size_mb = 64
     zipf_constant = 1.2
     workload_only = False
     is_phased_test = False
@@ -61,6 +88,7 @@ def run_filter_bench(
     hash_again_for_zipfian,
     capture_extra_stats,
     storage_cache_size_mb,
+    reverse_map_cache_size_mb,
     _seed,
     zipf_constant,
     workload_only,
@@ -160,6 +188,9 @@ def run_filter_bench(
             exit()
 
         ### Running benchmark
+        filter_storage_cache_size_mb = storage_cache_for_filter(
+            filter, storage_cache_size_mb, reverse_map_cache_size_mb
+        )
         argDict = {
             "-q": quotient_bits,
             "-r": remainder_bits,
@@ -168,7 +199,8 @@ def run_filter_bench(
             "--queryWorkload": query_workload,
             "--storageEngine": storage_engine,
             "--reverseMapEngine": reverse_map_engine,
-            "--storageCacheSizeMB": str(storage_cache_size_mb),
+            "--storageCacheSizeMB": str(filter_storage_cache_size_mb),
+            "--reverseMapCacheSizeMB": str(reverse_map_cache_size_mb),
             "--storageSleepUs": storage_sleep_us,
             "--reverseSleepUs": reverse_sleep_us,
             "--advFreq": adv_freq,
@@ -210,7 +242,7 @@ def run_filter_bench(
         summary_path = os.path.join(work_dir, '%s_summary.csv' % filter)
         latency_path = os.path.join(work_dir, '%s_latency.csv' % filter)
         fp_stats_path = os.path.join(work_dir, '%s_fp_stats.csv' % filter)
-        
+
         ex.add_artifact(csv_path)
         ex.add_artifact(summary_path)
         if capture_extra_stats:
@@ -218,36 +250,64 @@ def run_filter_bench(
             ex.add_artifact(fp_stats_path)
 
         ### Copying DB Stats
-        if collect_db_stats and not microbench and reverse_map_engine == "wiredTiger":
+        if collect_db_stats and not microbench and storage_engine == "wiredTiger":
             with tqdm(
                 desc="\nCopying DB Stats for " + filter,
                 bar_format="{desc}\nElapsed:{elapsed}",
             ) as pbar:
-                cmd = "cp database_wiredTiger/WiredTigerStat* %s_db_stats.json" % filter
-                ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
-            ex.add_artifact(os.path.join(work_dir, "%s_db_stats.json" % filter))
+                db_stats_path = os.path.join(work_dir, "%s_db_stats.json" % filter)
+                collect_wiredtiger_stats(
+                    os.path.join(
+                        work_dir,
+                        "database_wiredTiger",
+                        "WiredTigerStat*",
+                    ),
+                    db_stats_path,
+                )
+            ex.add_artifact(db_stats_path)
 
-            if reverse_map_engine == "wiredTiger" and filter != "nonAdaptive":
-                with tqdm(
-                    desc="\nCopying DB Stats for " + filter,
-                    bar_format="{desc}\nElapsed:{elapsed}",
-                ) as pbar:
-                    cmd = (
-                        "cp reverseMap_wiredTiger/WiredTigerStat* %s_rm_stats.json"
-                        % filter
-                    )
-                    ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
-                ex.add_artifact(os.path.join(work_dir, "%s_rm_stats.json" % filter))
+        if (
+            collect_db_stats
+            and not microbench
+            and reverse_map_engine == "wiredTiger"
+            and filter != "nonAdaptive"
+        ):
+            with tqdm(
+                desc="\nCopying reverse-map stats for " + filter,
+                bar_format="{desc}\nElapsed:{elapsed}",
+            ) as pbar:
+                rm_stats_path = os.path.join(work_dir, "%s_rm_stats.json" % filter)
+                collect_wiredtiger_stats(
+                    os.path.join(
+                        work_dir,
+                        "reverseMap_wiredTiger",
+                        "WiredTigerStat*",
+                    ),
+                    rm_stats_path,
+                )
+            ex.add_artifact(rm_stats_path)
 
     ### Parsing DB Stats
-    if (skip_db_parse) or ((not microbench) and (not is_insert_test)):
+    should_parse_db_stats = (
+        not skip_db_parse
+        and collect_db_stats
+        and not microbench
+        and not is_insert_test
+        and (storage_engine == "wiredTiger" or reverse_map_engine == "wiredTiger")
+    )
+    if should_parse_db_stats:
         with tqdm(
-            desc="Parsing DB Stats" + filter, bar_format="{desc}\nElapsed:{elapsed}"
+            desc="Parsing DB Stats", bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:
-            cmd = "python3 ./bench/parse_db_stats.py %s" % work_dir
-            ret = subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT)
-        ex.add_artifact(os.path.join(work_dir, "db_stats.csv"))
-        ex.add_artifact(os.path.join(work_dir, "rm_stats.csv"))
+            subprocess.run(
+                ["python3", "./bench/parse_db_stats.py", work_dir],
+                check=True,
+                stderr=subprocess.STDOUT,
+            )
+        if storage_engine == "wiredTiger":
+            ex.add_artifact(os.path.join(work_dir, "db_stats.csv"))
+        if reverse_map_engine == "wiredTiger":
+            ex.add_artifact(os.path.join(work_dir, "rm_stats.csv"))
 
 
 @ex.automain
