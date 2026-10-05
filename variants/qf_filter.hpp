@@ -34,6 +34,9 @@ struct BenchmarkParams {
   uint64_t reverseMapCacheSizeMB;
   uint64_t storageSleepUs;
   uint64_t reverseSleepUs;
+  uint64_t randomSeed;
+  bool isAdaptiveAdversary;
+  uint64_t adversaryWindowSize;
   bool shouldSort;
   bool sortAndInsertFingerprints;
 };

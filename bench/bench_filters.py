@@ -2,6 +2,7 @@ import glob
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from sacred import Experiment
 from tqdm import tqdm
@@ -10,11 +11,13 @@ from tqdm import tqdm
 
 ex = Experiment()
 
-work_dir = './sponge'
-exe_dir = './build' # KEEP in SYNC with the Makefile. All exe are run with cwd=work_dir
-build_log_dir = './sponge'
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BUILD_DIR = REPO_ROOT / "sponge" / "build"  # KEEP in SYNC with the Makefile.
 
-all_filters = ["adaptive", "nonAdaptive", "skiQF", "hybridSkiQF"]
+DEFAULT_FILTERS = (
+    "adaptive,nonAdaptive,skiQF,randomizedSkiQF,hybridSkiQF"
+)
+KNOWN_FILTERS = set(DEFAULT_FILTERS.split(","))
 
 
 def storage_cache_for_filter(filter_name, storage_cache_size_mb, reverse_map_cache_size_mb):
@@ -69,6 +72,10 @@ def test_config():
     sort_and_insert_fingerprints=True
     storage_sleep_us = 0
     reverse_sleep_us = 0
+    filter_names = DEFAULT_FILTERS
+    adversary_window_size = 100000
+    work_dir = "./sponge"
+    seed = 741262640
 
 
 @ex.capture
@@ -89,7 +96,7 @@ def run_filter_bench(
     capture_extra_stats,
     storage_cache_size_mb,
     reverse_map_cache_size_mb,
-    _seed,
+    seed,
     zipf_constant,
     workload_only,
     is_phased_test,
@@ -101,8 +108,41 @@ def run_filter_bench(
     skip_db_parse,
     storage_sleep_us,
     reverse_sleep_us,
+    filter_names,
+    adversary_window_size,
+    work_dir,
 ):
-    filters = all_filters
+    work_dir = os.path.abspath(work_dir)
+    os.makedirs(work_dir, exist_ok=True)
+    filters = [name.strip() for name in filter_names.split(",") if name.strip()]
+    unknown_filters = sorted(set(filters) - KNOWN_FILTERS)
+    if unknown_filters:
+        raise ValueError(f"Unknown filters: {', '.join(unknown_filters)}")
+    if not filters:
+        raise ValueError("filter_names must select at least one filter")
+    if break_even < 1:
+        raise ValueError("break_even must be at least 1")
+    if not 1 <= adv_freq <= 100:
+        raise ValueError("adv_freq must be between 1 and 100")
+    if num_rounds < 1:
+        raise ValueError("num_rounds must be at least 1")
+    if is_phased_test and (
+        num_phases < 1
+        or num_phases > num_rounds
+        or num_rounds % num_phases != 0
+    ):
+        raise ValueError(
+            "phased tests require num_phases <= num_rounds and evenly dividing it"
+        )
+    if query_workload == "adaptive-adversarial":
+        if not 0 < adversary_window_size < 1_000_000:
+            raise ValueError(
+                "adversary_window_size must be between 1 and 999999"
+            )
+        if is_phased_test:
+            raise ValueError(
+                "adaptive-adversarial and is_phased_test are separate modes"
+            )
     if is_insert_test:
         filters=['adaptive', 'nonAdaptive']
 
@@ -117,7 +157,7 @@ def run_filter_bench(
 
     ### Build Workload Generator Tool
     cmd = "make clean workload_gen"
-    log_file_path = os.path.join(build_log_dir, "workload-build.log")
+    log_file_path = os.path.join(work_dir, "workload-build.log")
     with open(log_file_path, "w") as log_file:
         with tqdm(
             desc="Building Workload-Generator\n" + cmd + extra_build_flags,
@@ -132,7 +172,7 @@ def run_filter_bench(
         return
 
     ### Generate Workload
-    cmd = os.path.join(exe_dir, "workload_gen")
+    cmd = str(BUILD_DIR / "workload_gen")
     log_file_path = os.path.join(work_dir, "workload-gen.log")
     argDict = {
         "-q": quotient_bits,
@@ -140,7 +180,7 @@ def run_filter_bench(
         "--numQueries": num_queries,
         "--numRounds": num_rounds,
         "--queryWorkload": query_workload,
-        "--seed": _seed,
+        "--seed": seed,
         "--zipfianConstant": zipf_constant,
     }
     for arg_name in argDict:
@@ -166,7 +206,7 @@ def run_filter_bench(
     ### Build benchmark
     for filter in filters:
         build_cmd = ""
-        log_file_path = os.path.join(build_log_dir, filter + "_build.log")
+        log_file_path = os.path.join(work_dir, filter + "_build.log")
         if filter == "nonAdaptive":
             build_cmd = (
                 "make clean && make bench_variants" + extra_build_flags # ADD USE_CQF=1 if you want to use original CQF code.
@@ -206,8 +246,10 @@ def run_filter_bench(
             "--advFreq": adv_freq,
             "--breakEven": break_even,
             "--numPhases": num_phases,
+            "--adversaryWindowSize": adversary_window_size,
+            "--seed": seed,
         }
-        cmd = "%s/bench_variants --filter %s " % (exe_dir, filter)
+        cmd = "%s --filter %s " % (BUILD_DIR / "bench_variants", filter)
         for arg_name in argDict:
             cmd = cmd + (" %s %s" % (arg_name, argDict[arg_name]))
         if microbench:
@@ -248,6 +290,10 @@ def run_filter_bench(
         if capture_extra_stats:
             ex.add_artifact(latency_path)
             ex.add_artifact(fp_stats_path)
+        if query_workload == "adaptive-adversarial":
+            ex.add_artifact(
+                os.path.join(work_dir, "%s_adversary.csv" % filter)
+            )
 
         ### Copying DB Stats
         if collect_db_stats and not microbench and storage_engine == "wiredTiger":
@@ -299,8 +345,22 @@ def run_filter_bench(
         with tqdm(
             desc="Parsing DB Stats", bar_format="{desc}\nElapsed:{elapsed}"
         ) as pbar:
+            parser_command = [
+                "python3",
+                "./bench/parse_db_stats.py",
+                work_dir,
+                "--db-filters",
+                ",".join(filters if storage_engine == "wiredTiger" else []),
+                "--reverse-map-filters",
+                ",".join(
+                    filter_name
+                    for filter_name in filters
+                    if reverse_map_engine == "wiredTiger"
+                    and filter_name != "nonAdaptive"
+                ),
+            ]
             subprocess.run(
-                ["python3", "./bench/parse_db_stats.py", work_dir],
+                parser_command,
                 check=True,
                 stderr=subprocess.STDOUT,
             )

@@ -1,9 +1,11 @@
 #include <chrono>
+#include <deque>
 #include <iostream>
 #include <stdio.h>
 #include <algorithm>
 #include <queue>
 #include <random>
+#include <unordered_set>
 
 #include "cxxopts.hpp"
 #include "qf_filter.hpp"
@@ -16,6 +18,7 @@
 #include "coin_flip_adaptive.hpp"
 #include "cqf.hpp"
 #include "hybrid_skiqf.hpp"
+#include "randomized_skiqf.hpp"
 #endif
 
 #include "db/splinter_db.hpp"
@@ -102,6 +105,45 @@ void write_fp_stats_to_file(std::string output_file_name, std::unordered_map<uin
   fclose(fp_stats_file);
 }
 
+class ActiveFalsePositivePool {
+public:
+  bool add(uint64_t queryKey) {
+    if (!active.insert(queryKey).second) {
+      return false;
+    }
+    queries.push_back(queryKey);
+    return true;
+  }
+
+  bool empty() const {
+    return queries.empty();
+  }
+
+  size_t size() const {
+    return active.size();
+  }
+
+  uint64_t takeNext() {
+    uint64_t queryKey = queries.front();
+    queries.pop_front();
+    return queryKey;
+  }
+
+  void keep(uint64_t queryKey) {
+    if (active.count(queryKey)) {
+      queries.push_back(queryKey);
+    }
+  }
+
+  bool retire(uint64_t queryKey) {
+    return active.erase(queryKey) > 0;
+  }
+
+private:
+  std::deque<uint64_t> queries;
+  std::unordered_set<uint64_t> active;
+};
+
 template <typename DbStorageEngine, typename QFilter>
 int run_benchmark(BenchmarkParams params) {
   QFilter qf;
@@ -118,6 +160,8 @@ int run_benchmark(BenchmarkParams params) {
   bool sortAndInsertFingerprints = params.sortAndInsertFingerprints;
   uint64_t storageSleepUs = params.storageSleepUs;
   uint64_t reverseSleepUs = params.reverseSleepUs;
+  bool isAdaptiveAdversary = params.isAdaptiveAdversary;
+  uint64_t adversaryWindowSize = params.adversaryWindowSize;
 
   int isPhasedTest = params.isPhasedTest;
   bool startWithAdversarialPhase = params.startWithAdversarialPhase;
@@ -136,10 +180,32 @@ int run_benchmark(BenchmarkParams params) {
 
   std::cout << "Writing to " << output_file << std::endl;
   FILE *rounds_file = fopen(output_file.c_str(), "w");
+  if (rounds_file == nullptr) {
+    perror("Failed to open benchmark output file");
+    return -1;
+  }
   fprintf(
       rounds_file,
       "round round_thput round_fp round_tp cumulative_thput cumulative_fp cumulative_adversarial_queries "
-      "round_adapts cumulative_adapts load_factor\n");
+      "round_adapts cumulative_adapts load_factor adversary_repeat_mode "
+      "boundary_probes adversary_switches active_adversarial_queries "
+      "admitted_adversarial_queries retired_adversarial_queries "
+      "uniform_adapts repeat_adapts\n");
+
+  FILE *adversary_file = nullptr;
+  if (isAdaptiveAdversary) {
+    std::string adversary_file_name = params.output_file + "_adversary.csv";
+    adversary_file = fopen(adversary_file_name.c_str(), "w");
+    if (adversary_file == nullptr) {
+      perror("Failed to open adaptive-adversary output file");
+      fclose(rounds_file);
+      return -1;
+    }
+    fprintf(
+        adversary_file,
+        "query_index,negative_queries,probe_key,probe_result,"
+        "inferred_hybrid_policy,selected_mode,active_pool_size\n");
+  }
 
   int ret = 0;
   ret = qf.construct(params);
@@ -179,9 +245,18 @@ int run_benchmark(BenchmarkParams params) {
   uint64_t adaptCount = 0;
   uint64_t numQueriesPerRound = numQueries / numRounds;
   uint64_t total_adversarial_queries_count = 0;
-	uint64_t *adv_queries = (uint64_t *)malloc(numQueries * sizeof(uint64_t));
-  uint64_t cur_adv_query = 0;
-  uint64_t adv_query_size = 0;
+  ActiveFalsePositivePool adversarialPool;
+  uint64_t retiredAdversarialQueries = 0;
+  uint64_t negativeQueryCount = 0;
+  uint64_t nextAdversaryBoundary = adversaryWindowSize;
+  uint64_t boundaryProbes = 0;
+  uint64_t adversarySwitches = 0;
+  uint64_t admittedAdversarialQueries = 0;
+  uint64_t uniformModeAdapts = 0;
+  uint64_t repeatModeAdapts = 0;
+  bool adaptiveRepeatMode = false;
+  const bool shouldCollectAdversarialCandidates =
+      is_adversarial || isPhasedTest || isAdaptiveAdversary;
 
   if (isPhasedTest && startWithAdversarialPhase) {
     is_adversarial = 0; // Round 0 will switch it to adversarial
@@ -205,12 +280,30 @@ int run_benchmark(BenchmarkParams params) {
     for (uint64_t i = 0; i < numQueriesPerRound; i++) {
       uint64_t queryIdx = r * numQueriesPerRound + i;
       uint64_t queryKey = querySet[queryIdx];
+      bool isReplayQuery = false;
+      bool isBoundaryProbe = false;
+      bool queryStartedInRepeatMode = adaptiveRepeatMode;
 
-      if (is_adversarial && queryIdx % adversarial_freq == 0 && adv_query_size > 0) {
+      if (
+          isAdaptiveAdversary &&
+          negativeQueryCount >= nextAdversaryBoundary) {
+        nextAdversaryBoundary += adversaryWindowSize;
+        if (!adversarialPool.empty()) {
+          queryKey = adversarialPool.takeNext();
+          isReplayQuery = true;
+          isBoundaryProbe = true;
+          total_adversarial_queries_count++;
+        } else if (adaptiveRepeatMode) {
+          adaptiveRepeatMode = false;
+          adversarySwitches++;
+        }
+      } else if (
+          (is_adversarial || (isAdaptiveAdversary && adaptiveRepeatMode)) &&
+          queryIdx % adversarial_freq == 0 &&
+          !adversarialPool.empty()) {
         total_adversarial_queries_count++;
-        if (cur_adv_query == adv_query_size)cur_adv_query=0;
-        queryKey = adv_queries[cur_adv_query];
-        cur_adv_query++;
+        queryKey = adversarialPool.takeNext();
+        isReplayQuery = true;
       }
 
 #ifdef PERF
@@ -218,10 +311,6 @@ int run_benchmark(BenchmarkParams params) {
 #endif
       qf.queryFilter(queryKey, &qfFilterQueryResult);
       if (qfFilterQueryResult.key_present) {
-        if ((is_adversarial || isPhasedTest) && queryIdx % adversarial_freq != 0) {
-          adv_queries[adv_query_size] = queryKey;
-          adv_query_size++;
-        }
 #ifdef PERF
         fp_freq[queryKey]++;
         bool sampleQuery = rand() < sampleThreshold;
@@ -239,6 +328,7 @@ int run_benchmark(BenchmarkParams params) {
 
 #endif
         if (!dbQueryResult) {
+          negativeQueryCount++;
           fpCount++;
           roundFpCount++;
 #ifdef PERF
@@ -253,14 +343,81 @@ int run_benchmark(BenchmarkParams params) {
             adapt_latencies.push_back((adaptEnd - adaptStart).count());
           }
 #endif
-          if (adaptRetCode == -1) {
-            continue;
-          } else {
+          if (adaptRetCode != -1) {
             roundAdaptCount += adaptRetCode;
             adaptCount += adaptRetCode;
+            if (isAdaptiveAdversary && adaptRetCode > 0) {
+              if (queryStartedInRepeatMode) {
+                repeatModeAdapts += adaptRetCode;
+              } else {
+                uniformModeAdapts += adaptRetCode;
+              }
+            }
+          }
+
+          if (isReplayQuery) {
+            adversarialPool.keep(queryKey);
+          } else if (
+              shouldCollectAdversarialCandidates &&
+              adversarialPool.add(queryKey)) {
+            admittedAdversarialQueries++;
+          }
+
+          if (isBoundaryProbe) {
+            const bool oldMode = adaptiveRepeatMode;
+            adaptiveRepeatMode = true;
+            boundaryProbes++;
+            if (oldMode != adaptiveRepeatMode) {
+              adversarySwitches++;
+            }
+            fprintf(
+                adversary_file,
+                "%lu,%lu,%lu,false_positive,tolerate,repeat,%lu\n",
+                queryIdx,
+                negativeQueryCount,
+                queryKey,
+                adversarialPool.size());
           }
         } else {
+          if (isReplayQuery && adversarialPool.retire(queryKey)) {
+            retiredAdversarialQueries++;
+          }
+          if (isBoundaryProbe) {
+            const bool oldMode = adaptiveRepeatMode;
+            adaptiveRepeatMode = false;
+            boundaryProbes++;
+            if (oldMode != adaptiveRepeatMode) {
+              adversarySwitches++;
+            }
+            fprintf(
+                adversary_file,
+                "%lu,%lu,%lu,database_hit,adapt,uniform,%lu\n",
+                queryIdx,
+                negativeQueryCount,
+                queryKey,
+                adversarialPool.size());
+          }
           roundTruePositive++;
+        }
+      } else {
+        negativeQueryCount++;
+        if (isReplayQuery && adversarialPool.retire(queryKey)) {
+          retiredAdversarialQueries++;
+        }
+        if (isBoundaryProbe) {
+          const bool oldMode = adaptiveRepeatMode;
+          adaptiveRepeatMode = false;
+          boundaryProbes++;
+          if (oldMode != adaptiveRepeatMode) {
+            adversarySwitches++;
+          }
+          fprintf(
+              adversary_file,
+              "%lu,%lu,%lu,true_negative,adapt,uniform,%lu\n",
+              queryIdx,
+              negativeQueryCount,
+              queryKey,
+              adversarialPool.size());
         }
       }
     }
@@ -274,7 +431,7 @@ int run_benchmark(BenchmarkParams params) {
         ((double)(r + 1) * (double)numQueriesPerRound) / overall_duration.count();
     fprintf(
         rounds_file,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %d %lu %lu %lu %lu %lu %lu %lu\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -284,11 +441,19 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor()
+        qf.loadFactor(),
+        adaptiveRepeatMode,
+        boundaryProbes,
+        adversarySwitches,
+        adversarialPool.size(),
+        admittedAdversarialQueries,
+        retiredAdversarialQueries,
+        uniformModeAdapts,
+        repeatModeAdapts
         );
     fprintf(
         stdout,
-        "%d %f %lu %lu %f %lu %lu %lu %lu %f\n",
+        "%d %f %lu %lu %f %lu %lu %lu %lu %f %d %lu %lu %lu %lu %lu %lu %lu\n",
         r,
         roundThroughput,
         roundFpCount,
@@ -298,9 +463,21 @@ int run_benchmark(BenchmarkParams params) {
         total_adversarial_queries_count,
         roundAdaptCount,
         adaptCount,
-        qf.loadFactor()
+        qf.loadFactor(),
+        adaptiveRepeatMode,
+        boundaryProbes,
+        adversarySwitches,
+        adversarialPool.size(),
+        admittedAdversarialQueries,
+        retiredAdversarialQueries,
+        uniformModeAdapts,
+        repeatModeAdapts
         );
   }
+  if (adversary_file != nullptr) {
+    fclose(adversary_file);
+  }
+  fclose(rounds_file);
 #ifdef PERF
   std::string latency_file_name = params.output_file + "_latency.csv";
   write_latencies_to_file(latency_file_name.c_str(), fp_miss_latencies, adapt_latencies);
@@ -396,6 +573,10 @@ int run_benchmark_with_storage_engine(
     ret = run_benchmark<DbStorageEngine, SkiQF<ReverseMapEngine>>(
         params);
   }
+  if (filterType == "randomizedSkiQF") {
+    ret = run_benchmark<DbStorageEngine, RandomizedSkiQF<ReverseMapEngine>>(
+        params);
+  }
   if (filterType == "coinFlip") {
     ret = run_benchmark<DbStorageEngine, CoinFlipAdaptiveFilter<ReverseMapEngine>>(
         params);
@@ -429,11 +610,11 @@ int main(int argc, char **argv) {
       cxxopts::value<int>()->default_value("5"))(
 
       "queryWorkload",
-      "uniform, false-positive, zipfian, adversarial,cyclic",
+      "uniform, false-positive, zipfian, adversarial, adaptive-adversarial, cyclic",
       cxxopts::value<std::string>()->default_value("false-positive"))(
 
       "filter",
-      "nonAdaptive, adaptive, skiQF, hybridSkiQF",
+      "nonAdaptive, adaptive, skiQF, randomizedSkiQF, hybridSkiQF",
       cxxopts::value<std::string>()->default_value("nonAdaptive"))(
 
       "storageEngine",
@@ -498,7 +679,11 @@ int main(int argc, char **argv) {
 
       "numPhases",
       "Number of adversarial phase switches in Cyclic test",
-      cxxopts::value<int>()->default_value("1"));
+      cxxopts::value<int>()->default_value("1"))(
+
+      "adversaryWindowSize",
+      "Negative-key queries per adaptive-adversary observation window",
+      cxxopts::value<uint64_t>()->default_value("100000"));
 
 
   auto result = options.parse(argc, argv);
@@ -524,9 +709,63 @@ int main(int argc, char **argv) {
   bool isPhasedTest = result["phasedTest"].as<bool>();
   bool startWithAdversarialPhase = result["startWithAdversarialPhase"].as<bool>();
   int numPhases = result["numPhases"].as<int>();
+  uint64_t adversaryWindowSize =
+      result["adversaryWindowSize"].as<uint64_t>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   uint64_t *insertSet; 
   uint64_t *querySet;
+
+  if (breakEven < 1) {
+    std::cerr << "breakEven must be at least 1" << std::endl;
+    return -1;
+  }
+  if (advFreq < 1 || advFreq > 100) {
+    std::cerr << "advFreq must be between 1 and 100" << std::endl;
+    return -1;
+  }
+  if (numRounds < 1 || numPhases < 1) {
+    std::cerr << "numRounds and numPhases must be at least 1" << std::endl;
+    return -1;
+  }
+  if (
+      isPhasedTest &&
+      (numPhases > numRounds || numRounds % numPhases != 0)) {
+    std::cerr
+        << "Phased tests require numPhases <= numRounds and evenly dividing it"
+        << std::endl;
+    return -1;
+  }
+  if (queryWorkload == "adaptive-adversarial" && adversaryWindowSize == 0) {
+    std::cerr << "adversaryWindowSize must be positive" << std::endl;
+    return -1;
+  }
+  if (
+      queryWorkload == "adaptive-adversarial" &&
+      adversaryWindowSize >= 1000000) {
+    std::cerr
+        << "adversaryWindowSize must be smaller than HybridSkiQF's "
+        << "1,000,000-query detection window"
+        << std::endl;
+    return -1;
+  }
+  if (queryWorkload == "adaptive-adversarial" && isPhasedTest) {
+    std::cerr << "adaptive-adversarial and phasedTest are separate modes"
+              << std::endl;
+    return -1;
+  }
+
+  const std::unordered_set<std::string> knownFilters = {
+      "nonAdaptive",
+      "adaptive",
+      "skiQF",
+      "randomizedSkiQF",
+      "coinFlip",
+      "hybridSkiQF",
+  };
+  if (!knownFilters.count(filterType)) {
+    std::cerr << "Unknown filter: " << filterType << std::endl;
+    return -1;
+  }
 
   if (microBench) {
     shouldSort = false;
@@ -583,6 +822,12 @@ int main(int argc, char **argv) {
     close(fd);
   }
 
+  if (numQueries < static_cast<uint64_t>(numRounds)) {
+    std::cerr << "The query set must contain at least one query per round"
+              << std::endl;
+    return -1;
+  }
+
   BenchmarkParams params;
   params.qfConfig = qfConfig;
   params.insertSet = insertSet;
@@ -603,6 +848,9 @@ int main(int argc, char **argv) {
   params.sortAndInsertFingerprints = sortAndInsertFingerprints;
   params.storageSleepUs = storageSleepUs;
   params.reverseSleepUs = reverseSleepUs;
+  params.randomSeed = static_cast<uint64_t>(seed);
+  params.isAdaptiveAdversary = queryWorkload == "adaptive-adversarial";
+  params.adversaryWindowSize = adversaryWindowSize;
 
 
   

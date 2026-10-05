@@ -1,11 +1,23 @@
+import argparse
 import csv
 import json
 import sys
 from pathlib import Path
 
 
-DB_FILTERS = ["adaptive", "nonAdaptive", "skiQF", "hybridSkiQF"]
-REVERSE_MAP_FILTERS = ["adaptive", "skiQF", "hybridSkiQF"]
+DB_FILTERS = [
+    "adaptive",
+    "nonAdaptive",
+    "skiQF",
+    "randomizedSkiQF",
+    "hybridSkiQF",
+]
+REVERSE_MAP_FILTERS = [
+    "adaptive",
+    "skiQF",
+    "randomizedSkiQF",
+    "hybridSkiQF",
+]
 
 STAT_FIELDS = {
     "block_manager_blocks_read": ("block-manager", "blocks read"),
@@ -85,23 +97,42 @@ def write_group_summary(test_dir, filters, input_suffix, output_name):
     return output_path
 
 
-def main(argv):
-    if len(argv) != 2:
-        raise SystemExit(f"Usage: {argv[0]} <benchmark-work-directory>")
+def parse_filter_names(value):
+    return [name for name in value.split(",") if name]
 
-    test_dir = Path(argv[1])
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("test_dir", type=Path)
+    parser.add_argument(
+        "--db-filters",
+        type=parse_filter_names,
+        default=DB_FILTERS,
+    )
+    parser.add_argument(
+        "--reverse-map-filters",
+        type=parse_filter_names,
+        default=REVERSE_MAP_FILTERS,
+    )
+    return parser.parse_args(argv[1:])
+
+
+def main(argv):
+    args = parse_args(argv)
+
+    test_dir = args.test_dir
     if not test_dir.is_dir():
         raise NotADirectoryError(test_dir)
 
     db_output = write_group_summary(
         test_dir,
-        DB_FILTERS,
+        args.db_filters,
         "db_stats",
         "db_stats.csv",
     )
     reverse_map_output = write_group_summary(
         test_dir,
-        REVERSE_MAP_FILTERS,
+        args.reverse_map_filters,
         "rm_stats",
         "rm_stats.csv",
     )

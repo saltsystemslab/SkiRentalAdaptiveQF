@@ -87,6 +87,9 @@ workload_gen:			$(OBJ_DIR)/workload_gen.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o
 										$(OBJ_DIR)/hashutil.o $(OBJ_DIR)/splinter_util.o $(OBJ_DIR)/test_driver.o \
 										$(OBJ_DIR)/partitioned_counter.o $(OBJ_DIR)/ll_table.o $(OBJ_DIR)/rand_util.o
 
+randomized_policy_test: | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) tests/randomized_ski_rental_policy_test.cc -o $(BUILD_DIR)/$@
+
 
 # dependencies between .o files and .cc (or .c) files
 

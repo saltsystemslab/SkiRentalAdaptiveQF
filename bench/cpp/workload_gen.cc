@@ -193,7 +193,9 @@ int main(int argc, char **argv) {
         querySet[queryIdx] = querySet[queryIdx] | ((insertSet[queryIdx % numInserts]) & minirun_bitmask);
       }
     }
-  } else if (queryWorkload == "uniform" || queryWorkload == "adversarial") {
+  } else if (
+      queryWorkload == "uniform" || queryWorkload == "adversarial" ||
+      queryWorkload == "adaptive-adversarial") {
     printf("Going to generate insertSet\n");
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
 

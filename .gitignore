@@ -22,3 +22,7 @@ stxxl.*
 obj/
 external/
 data/
+
+__pycache__/
+*.py[cod]
+sponge/
