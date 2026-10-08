@@ -246,7 +246,7 @@ def run_filter_bench(
             "--advFreq": adv_freq,
             "--breakEven": break_even,
             "--numPhases": num_phases,
-            "--adversaryWindowSize": adversary_window_size,
+            "--adaptiveAdversaryWindowSize": adversary_window_size,
             "--seed": seed,
         }
         cmd = "%s --filter %s " % (BUILD_DIR / "bench_variants", filter)
@@ -290,10 +290,6 @@ def run_filter_bench(
         if capture_extra_stats:
             ex.add_artifact(latency_path)
             ex.add_artifact(fp_stats_path)
-        if query_workload == "adaptive-adversarial":
-            ex.add_artifact(
-                os.path.join(work_dir, "%s_adversary.csv" % filter)
-            )
 
         ### Copying DB Stats
         if collect_db_stats and not microbench and storage_engine == "wiredTiger":

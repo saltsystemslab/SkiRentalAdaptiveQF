@@ -193,23 +193,6 @@ int main(int argc, char **argv) {
         querySet[queryIdx] = querySet[queryIdx] | ((insertSet[queryIdx % numInserts]) & minirun_bitmask);
       }
     }
-  } else if (
-      queryWorkload == "uniform" || queryWorkload == "adversarial" ||
-      queryWorkload == "adaptive-adversarial") {
-    printf("Going to generate insertSet\n");
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-
-    uint64_t temp = numQueries;
-    uint64_t offset = 0;
-    uint64_t block_size = 10000000;
-    printf("\n");
-    while (temp > 0) {
-      uint64_t numElements = (temp > block_size) ? block_size : temp;
-      RAND_bytes((unsigned char *)(querySet + offset), numElements * sizeof(uint64_t));
-      offset = offset + numElements;
-      temp = temp - numElements;
-      printf("%lu elements generated\n", offset);
-    }
   } else if (queryWorkload == "normal") {
     uint64_t numUniqueQueries = numQueries/5;
     RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
@@ -270,6 +253,21 @@ int main(int argc, char **argv) {
       if (hashAgainForZipfian) {
         querySet[i] = MurmurHash64A((void*)(&querySet[i]), sizeof(querySet[i]), randSeed);
       }     
+    }
+  } else {
+    printf("Going to generate insertSet\n");
+    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+
+    uint64_t temp = numQueries;
+    uint64_t offset = 0;
+    uint64_t block_size = 10000000;
+    printf("\n");
+    while (temp > 0) {
+      uint64_t numElements = (temp > block_size) ? block_size : temp;
+      RAND_bytes((unsigned char *)(querySet + offset), numElements * sizeof(uint64_t));
+      offset = offset + numElements;
+      temp = temp - numElements;
+      printf("%lu elements generated\n", offset);
     }
   } 
 

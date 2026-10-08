@@ -90,6 +90,9 @@ workload_gen:			$(OBJ_DIR)/workload_gen.o $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o
 randomized_policy_test: | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) tests/randomized_ski_rental_policy_test.cc -o $(BUILD_DIR)/$@
 
+benchmark_workload_test: tests/benchmark_workload_test.cc bench/cpp/benchmark_workloads.hpp bench/cpp/benchmark_output.hpp bench/cpp/benchmark_params.hpp variants/qf_filter.hpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) tests/benchmark_workload_test.cc -o $(BUILD_DIR)/$@
+
 
 # dependencies between .o files and .cc (or .c) files
 
@@ -100,7 +103,7 @@ $(OBJ_DIR)/partitioned_counter.o:		$(LOC_INCLUDE)/partitioned_counter.h
 $(OBJ_DIR)/ll_table.o:					$(LOC_SRC)/ll_table.c $(LOC_INCLUDE)/ll_table.h
 $(OBJ_DIR)/splinter_util.o:				$(LOC_SRC)/splinter_util.c $(LOC_INCLUDE)/splinter_util.h# $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o
 $(OBJ_DIR)/test_driver.o:				$(LOC_SRC)/test_driver.c $(LOC_INCLUDE)/test_driver.h# $(OBJ_DIR)/gqf.o $(OBJ_DIR)/gqf_file.o $(OBJ_DIR)/splinter_util.o
-$(OBJ_DIR)/bench_variants.o:				$(LOC_BENCH)/bench_variants.cc
+$(OBJ_DIR)/bench_variants.o:				$(LOC_BENCH)/bench_variants.cc $(LOC_BENCH)/benchmark_workloads.hpp $(LOC_BENCH)/benchmark_output.hpp $(LOC_BENCH)/benchmark_params.hpp $(LOC_BENCH)/benchmark_flags.hpp variants/qf_filter.hpp variants/base_adaptive_filter.hpp variants/randomized_skiqf.hpp
 $(OBJ_DIR)/workload_gen.o:				$(LOC_BENCH)/workload_gen.cc $(LOC_SRC)/rand_util.c
 
 #

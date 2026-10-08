@@ -55,9 +55,12 @@ The behavioral recipes compare `adaptive`, `nonAdaptive`, `skiQF`,
 `randomizedSkiQF`, and `hybridSkiQF`. Main WiredTiger experiments use a 4 MB
 reverse-map cache; the engine comparison explicitly uses 64 MB because
 SplinterDB does not support the smaller budget. The adaptive adversary uses a
-100,000-negative-query observation window by default, configurable with
-`ADVERSARY_WINDOW_SIZE`; it must remain below HybridSkiQF's one-million-query
-detection window.
+100,000-query observation window by default, configurable with
+`ADVERSARY_WINDOW_SIZE` (or `--adaptiveAdversaryWindowSize` when running the C++
+benchmark directly); it must remain below HybridSkiQF's one-million-query
+detection window. Each window counts all executed queries, including the initial
+probe and injected replays. Probes and replays do not advance the workload cursor;
+the total query budget includes them.
 
 `run_tests.sh` remains as the historical command list for the original paper
 experiments.
@@ -68,6 +71,8 @@ Validation
 ```bash
 make randomized_policy_test
 ./sponge/build/randomized_policy_test
+make benchmark_workload_test
+./sponge/build/benchmark_workload_test
 make clean bench_variants workload_gen
 ```
 

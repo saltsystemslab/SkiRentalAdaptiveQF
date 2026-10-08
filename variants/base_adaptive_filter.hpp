@@ -11,9 +11,8 @@ extern "C" {
 
 template <typename ReverseMap> class BaseAdaptiveFilter {
 public:
-  int construct(BenchmarkParams params) {
-    benchParams = params;
-    config = params.qfConfig;
+  int construct(const QFilterConfig& filterConfig) {
+    config = filterConfig;
     size_t num_slots = 1ull << config.qbits;
     if (!qf_malloc(
             &qf,
@@ -24,7 +23,8 @@ public:
             0)) {
       return -1;
     }
-    reverseMap.init("reverseMap", config.qbits + config.rbits, params.reverseMapCacheSizeMB, false, true, params.reverseSleepUs);
+    reverseMap.init("reverseMap", config.qbits + config.rbits,
+        config.reverseMapConfig.cacheSizeMB, false, true, config.reverseMapConfig.sleepUs);
     fullPoint = this->config.max_load_factor * (1ULL << this->config.qbits);
     return 0;
   }
@@ -40,7 +40,7 @@ public:
         return -1;
       }
       // Insert key into reverse map.
-      if (benchParams.sortAndInsertFingerprints) {
+      if (config.reverseMapConfig.sortAndInsertFingerprints) {
         ret = reverseMap.insertFingerprint(
           result.minirun_id, result.minirun_rank, keys[i]);
       } else {
@@ -53,7 +53,9 @@ public:
     }
     reverseMap.commitFingerprints();
     reverseMap.close();
-    reverseMap.init("reverseMap", config.qbits + config.rbits, benchParams.reverseMapCacheSizeMB, benchParams.shouldCollectDbStats, false, benchParams.reverseSleepUs);
+    reverseMap.init("reverseMap", config.qbits + config.rbits,
+        config.reverseMapConfig.cacheSizeMB, config.reverseMapConfig.shouldCollectDbStats,
+        false, config.reverseMapConfig.sleepUs);
     return 0;
   }
 
@@ -96,7 +98,6 @@ protected:
   QF qf;
   ReverseMap reverseMap;
   QFilterConfig config;
-  BenchmarkParams benchParams;
   size_t fullPoint;
 
 };

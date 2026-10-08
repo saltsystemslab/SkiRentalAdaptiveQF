@@ -16,15 +16,15 @@ extern "C" {
 template <typename ReverseMap>
 class RandomizedSkiQF : public BaseAdaptiveFilter<ReverseMap> {
 public:
-  int construct(BenchmarkParams params) {
-    if (params.qfConfig.breakEvenCount < 1) {
+  int construct(const QFilterConfig& config) {
+    if (config.breakEvenCount < 1) {
       return -1;
     }
 
     // Keep policy randomness deterministic and independent from workload
     // generation. The constant is a fixed stream discriminator.
-    policy.seed(params.randomSeed ^ 0x6a09e667f3bcc909ULL);
-    return BaseAdaptiveFilter<ReverseMap>::construct(params);
+    policy.seed(config.randomSeed ^ 0x6a09e667f3bcc909ULL);
+    return BaseAdaptiveFilter<ReverseMap>::construct(config);
   }
 
   static double adaptationProbability(uint64_t count, uint64_t breakEven) {
