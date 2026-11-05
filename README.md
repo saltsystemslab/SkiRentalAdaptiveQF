@@ -22,51 +22,44 @@ For code-samples on how to use the filters, please refer to [`bench_variants.cc`
 Experiments
 -----------
 
-Install the external dependencies once, then run either an individual recipe or
-the complete suite. Every recipe accepts `full` (the default) or `smoke` and
-records its parameters and seed with Sacred.
+Install dependencies once, then select experiment families or individual cases.
+The runner executes sequentially in shared `sponge` scratch space and saves
+Sacred artifacts into one result bundle. See [the experiment catalog and
+configuration](experiments/README.md) for all 38 cases.
 
 ```bash
 ./setup.sh
-./experiments/run-distributions.sh smoke
-./experiments/run-all.sh full
+.venv/bin/python experiments/run.py --list
+.venv/bin/python experiments/run.py run --tests all --size small --output sponge/tods/local-small
+.venv/bin/python experiments/run.py run --tests all --size medium --output sponge/tods/local-medium
+# On the measurement machine:
+.venv/bin/python experiments/run.py run --tests all --size large --output /data/tods/paper-run
+# Regenerate the report without running benchmarks:
+.venv/bin/python experiments/run.py report /data/tods/paper-run
 ```
 
-Results default to `./sponge/tods/<experiment-name>/`. Set `RESULTS_ROOT` and
-`SEED` to override the output root and reproducible seed. For example:
+Each bundle contains `results.tex` (and `results.pdf` when `latexmk` is available),
+portable paper snippets in `paper/`, normalized `metrics.csv` and `rounds.csv`,
+and raw artifacts/configuration/logs under each case and repetition. Existing
+paper files are untouched. The report covers every selected experiment in one
+place. A populated output directory is rejected to avoid mixing runs.
 
-```bash
-RESULTS_ROOT=/data/skiqf-runs SEED=12345 \
-    ./experiments/run-adaptive-adversary.sh full
-```
-
-| Recipe | Experiment family |
-|---|---|
-| `run-distributions.sh` | Uniform, normal, lognormal, and Zipfian workloads |
-| `run-cost-ratios.sh` | Reverse-map/database I/O cost ratios |
-| `run-microbenchmarks.sh` | In-memory insertion and query measurements |
-| `run-phased.sh` | Existing fixed workload-drift phases |
-| `run-engine-comparison.sh` | WiredTiger versus SplinterDB reverse maps |
-| `run-adversarial.sh` | Existing fixed adversarial replay matrix |
-| `run-adaptive-adversary.sh` | Black-box adversary targeting HybridSkiQF's detection lag |
-| `run-all.sh` | All recipes in sequence |
-
-The behavioral recipes compare `adaptive`, `nonAdaptive`, `skiQF`,
-`randomizedSkiQF`, and `hybridSkiQF`. Main WiredTiger experiments use a 4 MB
-reverse-map cache; the engine comparison explicitly uses 64 MB because
-SplinterDB does not support the smaller budget. The adaptive adversary uses a
-100,000-query observation window by default, configurable with
-`ADVERSARY_WINDOW_SIZE` (or `--adaptiveAdversaryWindowSize` when running the C++
-benchmark directly); it must remain below HybridSkiQF's one-million-query
-detection window. Each window counts all executed queries, including the initial
-probe and injected replays. Probes and replays do not advance the workload cursor;
-the total query budget includes them.
-
-`run_tests.sh` remains as the historical command list for the original paper
-experiments.
+The historical shell entry points now delegate to this runner. They accept
+`small`, `medium`, or `large`; legacy `smoke` maps to `small` (now q=20 and one
+million queries), and `full` maps to `large`. `RESULTS_ROOT` selects the parent
+output directory, `RUN_NAME` optionally names the bundle, and `SEED` overrides
+the default seed. Dependency setup remains separate.
 
 Validation
 ----------
+
+Focused adaptive-adversary checks:
+
+```bash
+make adaptive_adversary_test
+./sponge/build/adaptive_adversary_test
+.venv/bin/python -m unittest discover -s tests -p 'adaptive_feedback_report_test.py'
+```
 
 ```bash
 make randomized_policy_test
@@ -78,3 +71,9 @@ make clean bench_variants workload_gen
 
 The Python driver also accepts `work_dir=/path/to/scratch` so validation runs
 can avoid overwriting existing `./sponge` artifacts.
+
+Runner regression checks (after building workload_gen):
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p "*_test.py"
+```

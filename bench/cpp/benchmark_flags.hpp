@@ -16,6 +16,9 @@ inline void validateFlags(const BenchmarkParams& params, int advFreq) {
   if (params.qfConfig.breakEvenCount < 1) {
     throw std::invalid_argument("breakEven must be at least 1");
   }
+  if (params.qfConfig.hybridWindowSize == 0) {
+    throw std::invalid_argument("hybridWindowSize must be positive");
+  }
   if (advFreq < 1 || advFreq > 100) {
     throw std::invalid_argument("advFreq must be between 1 and 100");
   }
@@ -25,13 +28,6 @@ inline void validateFlags(const BenchmarkParams& params, int advFreq) {
   if (params.isPhasedTest &&
       (static_cast<uint64_t>(params.numPhases) > params.numRounds || params.numRounds % params.numPhases != 0)) {
     throw std::invalid_argument("Phased tests require numPhases <= numRounds and evenly dividing it");
-  }
-  if (params.isAdaptiveAdversary && params.adaptiveAdversaryWindowSize == 0) {
-    throw std::invalid_argument("adaptiveAdversaryWindowSize must be positive");
-  }
-  if (params.isAdaptiveAdversary && params.adaptiveAdversaryWindowSize >= 1000000) {
-    throw std::invalid_argument(
-        "adaptiveAdversaryWindowSize must be smaller than HybridSkiQF's 1,000,000-query detection window");
   }
   if (params.isAdaptiveAdversary && params.isPhasedTest) {
     throw std::invalid_argument("adaptive-adversarial and phasedTest are separate modes");
@@ -48,13 +44,13 @@ inline BenchmarkParams buildBenchmarkParams(const cxxopts::ParseResult& flags) {
   params.qfConfig.qbits = flags["q"].as<int>();
   params.qfConfig.rbits = flags["r"].as<int>();
   params.qfConfig.breakEvenCount = flags["breakEven"].as<int>();
+  params.qfConfig.hybridWindowSize = flags["hybridWindowSize"].as<uint64_t>();
   params.qfConfig.max_load_factor = 0.95;
   params.numRounds = flags["numRounds"].as<int>();
   params.output_file = flags["filter"].as<std::string>();
   const auto workload = flags["queryWorkload"].as<std::string>();
   params.is_adversarial = workload == "adversarial";
   params.isAdaptiveAdversary = workload == "adaptive-adversarial";
-  params.adaptiveAdversaryWindowSize = flags["adaptiveAdversaryWindowSize"].as<uint64_t>();
   params.isPhasedTest = flags["phasedTest"].as<bool>();
   params.numPhases = flags["numPhases"].as<int>();
   params.startWithAdversarialPhase = flags["startWithAdversarialPhase"].as<bool>();
@@ -64,7 +60,7 @@ inline BenchmarkParams buildBenchmarkParams(const cxxopts::ParseResult& flags) {
   params.qfConfig.reverseMapConfig.cacheSizeMB = flags["reverseMapCacheSizeMB"].as<uint64_t>();
   params.storageSleepUs = flags["storageSleepUs"].as<uint64_t>();
   params.qfConfig.reverseMapConfig.sleepUs = flags["reverseSleepUs"].as<uint64_t>();
-  params.qfConfig.randomSeed = static_cast<uint64_t>(flags["seed"].as<int>());
+  params.qfConfig.randomSeed = flags["seed"].as<uint64_t>();
   params.shouldSort = !flags["microBench"].as<bool>() && flags["sortAndInsertKeys"].as<bool>();
   params.qfConfig.reverseMapConfig.sortAndInsertFingerprints = flags["sortAndInsertFingerprints"].as<bool>();
   const int advFreq = flags["advFreq"].as<int>();

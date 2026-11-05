@@ -6,9 +6,37 @@
 #include <cstdio>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+struct AdversaryEvent {
+  uint64_t queryIndex;
+  uint64_t key;
+  bool replay;
+  const char* outcome;
+  bool repeatBefore;
+  bool repeatAfter;
+  size_t activeCandidates;
+};
+
+// Called after the measured workload, so trace serialization adds no disk I/O
+// to the adversary's ordinary query stream.
+inline void write_adversary_events(
+    const std::string& path, const std::vector<AdversaryEvent>& events) {
+  FILE* file = fopen(path.c_str(), "w");
+  if (!file) throw std::runtime_error("Cannot open adversary trace: " + path);
+  fprintf(file, "query_index,key,source,outcome,repeat_before,repeat_after,active_candidates\n");
+  for (const auto& event : events) {
+    fprintf(file, "%lu,%lu,%s,%s,%d,%d,%zu\n", event.queryIndex, event.key,
+        event.replay ? "replay" : "fresh", event.outcome,
+        event.repeatBefore, event.repeatAfter, event.activeCandidates);
+  }
+  const bool failed = ferror(file);
+  const int closed = fclose(file);
+  if (failed || closed) throw std::runtime_error("Cannot write adversary trace: " + path);
+}
 
 inline void printProgressBar(uint64_t current, uint64_t total, int barWidth = 50) {
   const double progress = total ? static_cast<double>(current) / total : 0;

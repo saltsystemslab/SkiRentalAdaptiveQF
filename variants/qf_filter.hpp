@@ -18,6 +18,7 @@ struct QFilterConfig {
   double max_load_factor;
   ReverseMapConfig reverseMapConfig;
   uint64_t randomSeed;
+  uint64_t hybridWindowSize = 1'000'000;
 };
 
 struct QFilterQueryResult {

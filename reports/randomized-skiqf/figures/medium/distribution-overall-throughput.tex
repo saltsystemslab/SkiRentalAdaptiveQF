@@ -1,0 +1,37 @@
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[hide axis,xmin=0,xmax=1,ymin=0,ymax=1,
+scale only axis,width=1cm,height=0.4cm,
+legend columns=5,legend cell align=left,
+legend style={draw=none,font=\small,at={(0.5,0.5)},anchor=center}]
+\addlegendimage{ybar legend,/tikz/ybar,skiqfNonAdaptiveBar}
+\addlegendentry{Non-adaptive}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfAdaptiveBar}
+\addlegendentry{AdaptiveQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfSkiBar}
+\addlegendentry{SkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfRandomizedBar}
+\addlegendentry{RandomizedSkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfHybridBar}
+\addlegendentry{HybridSkiQF}
+\end{axis}\end{tikzpicture}
+\par\medskip
+\begingroup
+\pgfmathsetlengthmacro{\skiqfpanelwidth}{(\linewidth-1.6cm-0.0cm)/1}
+\begin{tikzpicture}\begin{groupplot}[skiqf axis,
+group style={group size=1 by 1,horizontal sep=0.7cm,vertical sep=1.5cm},
+scale only axis,width=\skiqfpanelwidth,height=3cm,scaled y ticks=true]
+\nextgroupplot[title={Overall query throughput},
+ylabel={Throughput\\(MOps/sec)},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=3.5,
+xtick={0,1,2,3},
+xticklabels={Uniform,Normal,Lognormal,Zipfian},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,2.068739) (1,1.895934) (2,2.764757) (3,6.790382)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.211388) (1,3.02368) (2,3.51782) (3,5.17478)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,2.035416) (1,2.938368) (2,3.241766) (3,6.247072)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.731598) (1,3.965002) (2,2.811685) (3,5.818481)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.43449) (1,4.129935) (2,3.324736) (3,5.138479)};
+\end{groupplot}\end{tikzpicture}\endgroup\end{center}

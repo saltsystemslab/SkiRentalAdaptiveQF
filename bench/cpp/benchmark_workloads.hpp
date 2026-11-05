@@ -9,7 +9,9 @@
 #include <cstdlib>
 #include <deque>
 #include <initializer_list>
+#include <list>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,6 +23,12 @@ using BenchmarkClock = std::chrono::high_resolution_clock;
 
 enum class QueryOutcome { TrueNegative, TruePositive, FalsePositive };
 
+// Perfect recognition of an ordinary query's correction outcome, modeling
+// the timing side channel. No filter strategy or detector state is exposed.
+struct QueryFeedback {
+  int adaptationResult = 0; // 0: tolerated, 1: corrected, -1: failed (FP only).
+};
+
 struct RoundStats {
   uint64_t falsePositives = 0;
   uint64_t truePositives = 0;
@@ -31,6 +39,7 @@ struct WorkloadStats {
   uint64_t falsePositives = 0;
   uint64_t adapts = 0;
   uint64_t adversarialQueries = 0;
+  std::vector<AdversaryEvent> adversaryEvents;
 #ifdef PERF
   std::vector<uint64_t> dbMissLatencies;
   std::vector<uint64_t> adaptLatencies;
@@ -44,7 +53,9 @@ QueryOutcome execute_query(
     DbStorageEngine& db,
     uint64_t queryKey,
     RoundStats& roundStats,
-    WorkloadStats& stats) {
+    WorkloadStats& stats,
+    QueryFeedback* feedback = nullptr) {
+  if (feedback) *feedback = {};
   QFilterQueryResult result;
   qf.queryFilter(queryKey, &result);
   if (!result.key_present) {
@@ -52,14 +63,14 @@ QueryOutcome execute_query(
   }
 
 #ifdef PERF
-  stats.fpFrequency[queryKey]++;
   const bool sampleQuery = rand() < INT_MAX;
   const auto dbStart = sampleQuery ? BenchmarkClock::now() : BenchmarkClock::time_point{};
 #endif
   const int dbResult = db.lookupKey(queryKey);
 #ifdef PERF
   if (sampleQuery) {
-    stats.dbMissLatencies.push_back((BenchmarkClock::now() - dbStart).count());
+    stats.dbMissLatencies.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        BenchmarkClock::now() - dbStart).count());
   }
 #endif
   if (dbResult) {
@@ -67,15 +78,20 @@ QueryOutcome execute_query(
     return QueryOutcome::TruePositive;
   }
 
+#ifdef PERF
+  stats.fpFrequency[queryKey]++;
+#endif
   roundStats.falsePositives++;
   stats.falsePositives++;
 #ifdef PERF
   const auto adaptStart = sampleQuery ? BenchmarkClock::now() : BenchmarkClock::time_point{};
 #endif
   const int adaptResult = qf.adapt(queryKey, &result);
+  if (feedback) feedback->adaptationResult = adaptResult;
 #ifdef PERF
   if (sampleQuery) {
-    stats.adaptLatencies.push_back((BenchmarkClock::now() - adaptStart).count());
+    stats.adaptLatencies.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        BenchmarkClock::now() - adaptStart).count());
   }
 #endif
   if (adaptResult != -1) {
@@ -214,50 +230,53 @@ template <typename QFilter, typename DbStorageEngine>
 WorkloadStats run_adaptive_adversarial_workload(
     QFilter& qf, DbStorageEngine& db, const BenchmarkParams& params, FILE* roundsFile) {
   WorkloadStats stats;
-  std::deque<uint64_t> candidates;
+  std::list<uint64_t> candidates;
+  std::unordered_map<uint64_t, std::list<uint64_t>::iterator> active;
   WorkloadMeasurements measurements(params, roundsFile);
   uint64_t queryIdx = 0;
-  uint64_t queriesPerformed = 0;
-  const uint64_t numWindows = params.numQueries / params.adaptiveAdversaryWindowSize
-      + (params.numQueries % params.adaptiveAdversaryWindowSize != 0);
-  for (uint64_t window = 0; window < numWindows; window++) {
-    const uint64_t queriesInWindow = std::min(
-        params.adaptiveAdversaryWindowSize, params.numQueries - queriesPerformed);
-    bool repeatMode = false;
-    uint64_t windowQueries = 0;
-
-    // Probe at the start of the window; an empty pool starts a uniform window.
-    if (!candidates.empty()) {
-      const uint64_t probeKey = candidates.front();
-      candidates.pop_front();
-      stats.adversarialQueries++;
-      const QueryOutcome outcome = execute_query(qf, db, probeKey, measurements.intervalStats, stats);
-      repeatMode = outcome == QueryOutcome::FalsePositive;
-      if (repeatMode) {
-        candidates.push_back(probeKey);
-      }
-      windowQueries++;
-      queriesPerformed++;
-      measurements.report_if_due(queriesPerformed, stats, qf);
+  bool repeatMode = false;
+  auto retire = [&](uint64_t key) {
+    const auto found = active.find(key);
+    if (found != active.end()) {
+      candidates.erase(found->second);
+      active.erase(found);
     }
-
-    // Every executed query counts; only a base query advances the workload cursor.
-    for (; windowQueries < queriesInWindow; windowQueries++) {
-      uint64_t queryKey;
-      if (repeatMode && queriesPerformed % params.adversarial_freq == 0 && !candidates.empty()) {
-        queryKey = candidates.front();
-        candidates.pop_front();
-        stats.adversarialQueries++;
-      } else {
-        queryKey = params.querySet[queryIdx++];
+  };
+  for (uint64_t performed = 0; performed < params.numQueries; performed++) {
+    const bool repeatBefore = repeatMode;
+    const bool replay = repeatMode && performed % params.adversarial_freq == 0
+        && !candidates.empty();
+    const uint64_t key = replay ? candidates.front() : params.querySet[queryIdx++];
+    if (replay) stats.adversarialQueries++;
+    QueryFeedback feedback;
+    const QueryOutcome outcome = execute_query(
+        qf, db, key, measurements.intervalStats, stats, &feedback);
+    const char* observed = outcome == QueryOutcome::TrueNegative ? "negative" : "present";
+    if (outcome == QueryOutcome::FalsePositive) {
+      if (feedback.adaptationResult < 0) {
+        throw std::runtime_error("Adaptive-adversary correction failed at query "
+            + std::to_string(performed + 1));
       }
-      const QueryOutcome outcome = execute_query(qf, db, queryKey, measurements.intervalStats, stats);
-      if (outcome == QueryOutcome::FalsePositive) {
-        candidates.push_back(queryKey);
+      repeatMode = feedback.adaptationResult == 0;
+      observed = repeatMode ? "tolerated" : "adapted";
+      if (!repeatMode) {
+        retire(key);
+      } else if (!active.count(key)) {
+        candidates.push_back(key);
+        active.emplace(key, std::prev(candidates.end()));
+      } else if (replay) {
+        candidates.splice(candidates.end(), candidates, active.at(key));
       }
-      queriesPerformed++;
-      measurements.report_if_due(queriesPerformed, stats, qf);
+    } else if (replay) {
+      // Collateral corrections can invalidate a candidate. Retire it on its
+      // ordinary replay without changing our belief about the current policy.
+      retire(key);
     }
+    if (outcome == QueryOutcome::FalsePositive || replay) {
+      stats.adversaryEvents.push_back(
+          {performed + 1, key, replay, observed, repeatBefore, repeatMode, active.size()});
+    }
+    measurements.report_if_due(performed + 1, stats, qf);
   }
   return stats;
 }
@@ -270,7 +289,7 @@ struct MicrobenchmarkStats {
 // Measure the filter after the main workload, without database lookups or adaptation.
 template <typename QFilter>
 MicrobenchmarkStats run_microbenchmark_workload(QFilter& qf, const BenchmarkParams& params) {
-  std::mt19937 generator(std::random_device{}());
+  std::mt19937_64 generator(params.qfConfig.randomSeed);
   std::shuffle(params.insertSet, params.insertSet + params.numInserts, generator);
   QFilterQueryResult result;
   auto query_insert_set = [&]() {

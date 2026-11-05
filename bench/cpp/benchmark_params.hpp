@@ -23,7 +23,6 @@ struct BenchmarkParams {
   uint64_t storageCacheSizeMB;
   uint64_t storageSleepUs;
   bool isAdaptiveAdversary;
-  uint64_t adaptiveAdversaryWindowSize;
   bool shouldSort;
 };
 

@@ -1,0 +1,37 @@
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[hide axis,xmin=0,xmax=1,ymin=0,ymax=1,
+scale only axis,width=1cm,height=0.4cm,
+legend columns=5,legend cell align=left,
+legend style={draw=none,font=\small,at={(0.5,0.5)},anchor=center}]
+\addlegendimage{ybar legend,/tikz/ybar,skiqfNonAdaptiveBar}
+\addlegendentry{Non-adaptive}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfAdaptiveBar}
+\addlegendentry{AdaptiveQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfSkiBar}
+\addlegendentry{SkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfRandomizedBar}
+\addlegendentry{RandomizedSkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfHybridBar}
+\addlegendentry{HybridSkiQF}
+\end{axis}\end{tikzpicture}
+\par\medskip
+\begingroup
+\pgfmathsetlengthmacro{\skiqfpanelwidth}{(\linewidth-1.6cm-0.0cm)/1}
+\begin{tikzpicture}\begin{groupplot}[skiqf axis,
+group style={group size=1 by 1,horizontal sep=0.7cm,vertical sep=1.5cm},
+scale only axis,width=\skiqfpanelwidth,height=3cm,scaled y ticks=true]
+\nextgroupplot[title={Overall disk I/O},
+ylabel={Bytes read\\(GiB)},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=3.5,
+xtick={0,1,2,3},
+xticklabels={Uniform,Normal,Lognormal,Zipfian},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.8140220642) (1,0.6193466187) (2,0.5996246338) (3,0.2178497314)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.334709167) (1,0.2655448914) (2,0.3834266663) (3,0.2697715759)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.7921600342) (1,0.3638153076) (2,0.4488105774) (3,0.2252578735)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.9665985107) (1,0.3255844116) (2,0.4227333069) (3,0.2389945984)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.7920684814) (1,0.3141288757) (2,0.421672821) (3,0.2704772949)};
+\end{groupplot}\end{tikzpicture}\endgroup\end{center}

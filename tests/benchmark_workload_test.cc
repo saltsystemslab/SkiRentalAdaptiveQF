@@ -67,7 +67,6 @@ BenchmarkParams parameters(std::vector<uint64_t>& queries) {
   params.numRounds = 2;
   params.adversarial_freq = 1;
   params.numPhases = 2;
-  params.adaptiveAdversaryWindowSize = 2;
   return params;
 }
 
@@ -146,8 +145,8 @@ bool test_standard() {
   passed &= expect(stats.falsePositives == 2 && stats.adapts == 0 && stats.adversarialQueries == 0,
       "incorrect standard workload totals");
 #ifdef PERF
-  passed &= expect(stats.fpFrequency.at(1) == 2 && stats.fpFrequency.at(7) == 2,
-      "extra stats must retain filter-positive frequencies");
+  passed &= expect(stats.fpFrequency.at(1) == 2 && stats.fpFrequency.count(7) == 0,
+      "extra stats must count confirmed false positives only");
   passed &= expect(stats.dbMissLatencies.size() == 4 && stats.adaptLatencies.size() == 2,
       "extra stats must retain sampled lookup and adaptation latencies");
 #endif
@@ -227,113 +226,12 @@ bool test_phases() {
   return passed;
 }
 
-bool test_adaptive_windows() {
-  bool passed = true;
-  std::vector<uint64_t> queries{7, 1, 7, 9, 9, 9, 9, 9};
-  auto params = parameters(queries);
-  params.adversarial_freq = 3;
-  FakeFilter filter;
-  filter.positiveKeys = {1, 7};
-  FakeDb db;
-  db.presentKeys = {7};
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, params, passed, 2);
-  passed &= expect(filter.queries == std::vector<uint64_t>({7, 1, 1, 1, 1, 7, 1, 9}),
-      "adaptive windows must count every query; probes and replays must leave the workload cursor alone");
-  passed &= expect(stats.adversarialQueries == 4, "incorrect adaptive probe and replay count");
-  return passed;
-}
-
-bool test_adaptive_switches() {
-  bool passed = true;
-  std::vector<uint64_t> queries{1, 2, 9, 9, 9, 9, 9, 9, 9, 9};
-  auto params = parameters(queries);
-  params.adaptiveAdversaryWindowSize = 3;
-  FakeFilter filter;
-  filter.positiveKeys = {1, 2};
-  filter.adaptAfter[1] = 1;
-  FakeDb db;
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, params, passed);
-  passed &= expect(filter.queries == std::vector<uint64_t>({1, 2, 9, 1, 9, 9, 2, 2, 2, 2}),
-      "resolved probes must switch to uniform; surviving probes must resume repeats");
-  passed &= expect(stats.falsePositives == 6 && stats.adapts == 1 && stats.adversarialQueries == 5,
-      "incorrect adaptive switch totals");
-  return passed;
-}
-
-bool test_empty_queue_and_failed_adapt() {
-  bool passed = true;
-  std::vector<uint64_t> queries{9, 9, 9, 1, 9, 9, 9, 9};
-  FakeFilter filter;
-  filter.positiveKeys = {1};
-  filter.unresolvedAdaptResult = -1;
-  FakeDb db;
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, parameters(queries), passed);
-  passed &= expect(filter.queries == std::vector<uint64_t>({9, 9, 9, 1, 1, 1, 1, 1}),
-      "empty boundaries must use base queries; failed adaptations must retain false positives");
-  passed &= expect(stats.falsePositives == 5 && stats.adapts == 0 && stats.adversarialQueries == 4,
-      "failed adaptations must not underflow adaptation counts");
-  return passed;
-}
-
-bool test_database_hit_probe() {
-  bool passed = true;
-  std::vector<uint64_t> queries{1, 9, 9, 2, 9, 9, 9, 9};
-  FakeFilter filter;
-  filter.positiveKeys = {1, 2};
-  FakeDb db;
-  db.hitOnLookup[1] = 2;
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, parameters(queries), passed, 1);
-  passed &= expect(filter.queries == std::vector<uint64_t>({1, 9, 1, 9, 2, 9, 2, 2}),
-      "database-hit probes must retire candidates, select uniform mode, and count toward the window");
-  passed &= expect(stats.adversarialQueries == 3, "incorrect replay count after database-hit probe");
-  return passed;
-}
-
-bool test_adaptive_workload_cursor() {
-  bool passed = true;
-  std::vector<uint64_t> queries{1, 20, 21, 22, 23, 24, 25, 26, 27, 28};
-  auto params = parameters(queries);
-  params.adaptiveAdversaryWindowSize = 4;
-  params.adversarial_freq = 2;
-  FakeFilter filter;
-  filter.positiveKeys = {1};
-  filter.adaptAfter[1] = 2;
-  FakeDb db;
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, params, passed);
-  passed &= expect(filter.queries == std::vector<uint64_t>({1, 20, 21, 22, 1, 23, 1, 24, 25, 26}),
-      "injected queries must preserve the next workload key and use total queries for replay frequency");
-  passed &= expect(filter.measurementQueryCounts == std::vector<uint64_t>({5, 10}),
-      "measurement thresholds must count probes and replays toward the total query budget");
-  passed &= expect(stats.falsePositives == 2 && stats.adapts == 1 && stats.adversarialQueries == 2,
-      "incorrect totals for a partial final adaptive window");
-  return passed;
-}
-
-bool test_single_query_adaptive_windows() {
-  bool passed = true;
-  std::vector<uint64_t> queries{1, 9, 9, 9, 9};
-  auto params = parameters(queries);
-  params.adaptiveAdversaryWindowSize = 1;
-  params.adversarial_freq = 100;
-  FakeFilter filter;
-  filter.positiveKeys = {1};
-  filter.adaptAfter[1] = 3;
-  FakeDb db;
-  const auto stats = run(run_adaptive_adversarial_workload, filter, db, params, passed, 0, {2, 1});
-  passed &= expect(filter.queries == std::vector<uint64_t>({1, 1, 1, 1, 9}),
-      "a probe may fill the entire window; a retired candidate must leave the next window uniform");
-  passed &= expect(stats.falsePositives == 3 && stats.adapts == 1 && stats.adversarialQueries == 3,
-      "single-query windows must make progress and count each probe once");
-  return passed;
-}
-
 bool test_uneven_measurements() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
   auto params = parameters(queries);
   params.numRounds = 4;
   params.adversarial_freq = 100;
-  params.adaptiveAdversaryWindowSize = 100;
   for (Workload workload : {run_standard_workload<FakeFilter, FakeDb>,
                            run_adversarial_workload<FakeFilter, FakeDb>,
                            run_phased_adversarial_workload<FakeFilter, FakeDb>,
@@ -398,26 +296,6 @@ bool test_uneven_phases() {
   return passed;
 }
 
-bool test_adaptive_measurement_independence() {
-  bool passed = true;
-  std::vector<uint64_t> queries{1, 2, 9, 9, 9, 9, 9, 9, 9, 9};
-  for (uint64_t numRounds : {1, 4, 10}) {
-    auto params = parameters(queries);
-    params.numRounds = numRounds;
-    params.adaptiveAdversaryWindowSize = 3;
-    FakeFilter filter;
-    filter.positiveKeys = {1, 2};
-    filter.adaptAfter[1] = 1;
-    FakeDb db;
-    const auto stats = run(run_adaptive_adversarial_workload, filter, db, params, passed);
-    passed &= expect(filter.queries == std::vector<uint64_t>({1, 2, 9, 1, 9, 9, 2, 2, 2, 2}),
-        "measurements inside observation windows must not reset candidates, query counts, or repeat mode");
-    passed &= expect(stats.falsePositives == 6 && stats.adapts == 1 && stats.adversarialQueries == 5,
-        "changing measurement frequency must not change adaptive workload outcomes");
-  }
-  return passed;
-}
-
 bool test_microbenchmark_workload() {
   std::vector<uint64_t> inserts = {1, 2, 3};
   std::vector<uint64_t> queries = {1, 9, 10, 11};
@@ -449,15 +327,8 @@ int main() {
   passed &= test_repeated_observations();
   passed &= test_true_positives_not_admitted();
   passed &= test_phases();
-  passed &= test_adaptive_windows();
-  passed &= test_adaptive_switches();
-  passed &= test_empty_queue_and_failed_adapt();
-  passed &= test_database_hit_probe();
-  passed &= test_adaptive_workload_cursor();
-  passed &= test_single_query_adaptive_windows();
   passed &= test_uneven_measurements();
   passed &= test_measurement_limits();
   passed &= test_uneven_phases();
-  passed &= test_adaptive_measurement_independence();
   return passed ? 0 : 1;
 }

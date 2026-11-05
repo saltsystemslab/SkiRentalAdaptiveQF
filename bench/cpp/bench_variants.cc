@@ -80,7 +80,15 @@ int run_benchmark(BenchmarkParams params) {
 
   WorkloadStats stats;
   if (params.isAdaptiveAdversary) {
-    stats = run_adaptive_adversarial_workload(qf, db, params, rounds_file);
+    try {
+      stats = run_adaptive_adversarial_workload(qf, db, params, rounds_file);
+    } catch (const std::exception& error) {
+      fprintf(stderr, "%s\n", error.what());
+      fclose(rounds_file);
+      db.close();
+      qf.close();
+      return -1;
+    }
   } else if (params.isPhasedTest) {
     stats = run_phased_adversarial_workload(qf, db, params, rounds_file);
   } else if (params.is_adversarial) {
@@ -89,6 +97,9 @@ int run_benchmark(BenchmarkParams params) {
     stats = run_standard_workload(qf, db, params, rounds_file);
   }
   fclose(rounds_file);
+  if (params.isAdaptiveAdversary) {
+    write_adversary_events(params.output_file + "_adversary.csv", stats.adversaryEvents);
+  }
 #ifdef PERF
   std::string latency_file_name = params.output_file + "_latency.csv";
   write_latencies_to_file(latency_file_name.c_str(), stats.dbMissLatencies, stats.adaptLatencies);
@@ -117,11 +128,12 @@ int run_benchmark_with_storage_engine(
   int ret = -1;
   #if USE_CQF
   if (filterType == "nonAdaptive") {
-    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<ReverseMapEngine>>(params);
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<MockDB>>(params);
   }
   #else
   if (filterType == "nonAdaptive") {
-    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<ReverseMapEngine>>(params);
+    // The baseline has no reverse map. Its database receives that cache budget.
+    ret = run_benchmark<DbStorageEngine, NonAdaptiveFilter<MockDB>>(params);
   }
   if (filterType == "adaptive") {
     ret = run_benchmark<
@@ -154,7 +166,7 @@ int main(int argc, char **argv) {
   options.add_options()(
       "seed",
       "random seed",
-      cxxopts::value<int>()->default_value("0"))(
+      cxxopts::value<uint64_t>()->default_value("0"))(
 
       "q,quotient",
       "Quotient bits to use in filter",
@@ -240,9 +252,9 @@ int main(int argc, char **argv) {
       "Number of adversarial phase switches in Cyclic test",
       cxxopts::value<int>()->default_value("1"))(
 
-      "adaptiveAdversaryWindowSize",
-      "Total queries per adaptive-adversary observation window, including probes and replays",
-      cxxopts::value<uint64_t>()->default_value("100000"));
+      "hybridWindowSize",
+      "HybridSkiQF detector window in negative-key queries",
+      cxxopts::value<uint64_t>()->default_value("1000000"));
 
 
   auto result = options.parse(argc, argv);

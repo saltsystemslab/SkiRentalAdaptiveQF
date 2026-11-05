@@ -15,6 +15,12 @@ template <typename ReverseMap>
 class HybridSkiQF: public BaseAdaptiveFilter <ReverseMap> {
 public:
 
+  int construct(const QFilterConfig& config) {
+    if (config.hybridWindowSize == 0) return -1;
+    windowSize = config.hybridWindowSize;
+    return BaseAdaptiveFilter<ReverseMap>::construct(config);
+  }
+
   int queryFilter(uint64_t queryKey, QFilterQueryResult *result) {
     int minirun_rank;
     uint64_t hash;

@@ -1,11 +1,15 @@
+#include <fstream>
+#include <iomanip>
+#include <cmath>
+#include <algorithm>
 #include <chrono>
+#include <cerrno>
 #include <iostream>
 #include <stdio.h>
 #include <queue>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <openssl/rand.h>
 #include <random>
 
 #include "cxxopts.hpp"
@@ -30,41 +34,31 @@ void printProgressBar(int current, int total, int barWidth = 50) {
     std::cout.flush();
 }
 
-int saveWorkloadToFile(uint64_t *insertSet, uint64_t numInserts, uint64_t *querySet, uint64_t numQueries) {
-  {
-    int fd = open("insertSet", O_RDWR | O_CREAT, 0644);
-    if (fd == -1) {
-      perror("Failed to write insertSet");
-      return -1;
+int saveKeySet(const char* name, const uint64_t* keys, uint64_t count) {
+  const int fd = open(name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd == -1) { perror(name); return -1; }
+  auto writeAll = [fd](const void* data, size_t bytes) {
+    const char* cursor = static_cast<const char*>(data);
+    while (bytes > 0) {
+      const ssize_t written = write(fd, cursor, bytes);
+      if (written < 0 && errno == EINTR) continue;
+      if (written <= 0) return false;
+      cursor += written;
+      bytes -= written;
     }
-    ssize_t bytesToWrite = (1 + numInserts) * sizeof(uint64_t) ;
-    ssize_t offset = pwrite(fd, &numInserts, sizeof(uint64_t), 0);
-    char *buf = (char *)insertSet;
-    while (offset < bytesToWrite) {
-      ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
-      offset += bytesWritten; 
-      printf("bytes written: %lu\n", bytesWritten);
-    }
-    close(fd);
-  }
+    return true;
+  };
+  const bool ok = writeAll(&count, sizeof(count))
+      && writeAll(keys, count * sizeof(uint64_t));
+  if (!ok) perror(name);
+  const int closeResult = close(fd);
+  return ok && closeResult == 0 ? 0 : -1;
+}
 
-  {
-    int fd = open("querySet", O_RDWR | O_CREAT, 0644);
-    if (fd == -1) {
-      perror("Failed to write querySet");
-      return -1;
-    }
-    ssize_t bytesToWrite = (1 + numQueries) * sizeof(uint64_t) ;
-    ssize_t offset = pwrite(fd, &numQueries, sizeof(uint64_t), 0);
-    char *buf = (char *)querySet;
-    while (offset < bytesToWrite) {
-      ssize_t bytesWritten = pwrite(fd, buf + offset, bytesToWrite-offset, offset);
-      offset += bytesWritten; 
-      printf("bytes written: %lu bytesToWrite %lu %lu\n", bytesWritten, offset, bytesToWrite);
-    }
-    close(fd);
-  }
-  return 0;
+int saveWorkloadToFile(uint64_t* insertSet, uint64_t numInserts,
+    uint64_t* querySet, uint64_t numQueries) {
+  if (saveKeySet("insertSet", insertSet, numInserts) != 0) return -1;
+  return saveKeySet("querySet", querySet, numQueries);
 }
 
 int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
@@ -126,7 +120,7 @@ int saveWorkloadStatsToFile(uint64_t *querySet, uint64_t numQueries) {
 int main(int argc, char **argv) {
   cxxopts::Options options("Bench adaptive filter variants");
 
-  options.add_options()(
+  options.add_options()("singletonFraction", "Fraction of distinct keys occurring once", cxxopts::value<double>()->default_value("0.5"))("frequencyStats", "Save frequency statistics", cxxopts::value<bool>()->default_value("false"))(
       "seed",
       "RandSeed",
       cxxopts::value<uint64_t>()->default_value("0"))(
@@ -172,6 +166,10 @@ int main(int argc, char **argv) {
   std::string queryWorkload = result["queryWorkload"].as<std::string>();
   size_t numInserts = (1ull << qbits) * 0.9f; // strtoull(argv[3], NULL, 10);
   bool hashAgainForZipfian = result["hashAgainForZipfian"].as<bool>();
+  std::mt19937_64 keyGenerator(randSeed);
+  auto fillKeys = [&keyGenerator](uint64_t* keys, uint64_t count) {
+    for (uint64_t i = 0; i < count; ++i) keys[i] = keyGenerator();
+  };
   std::cout<<"HashAgainForZipfian: "<<hashAgainForZipfian<<std::endl;
 
   uint64_t *insertSet = (uint64_t *)malloc(numInserts * sizeof(uint64_t));
@@ -181,9 +179,29 @@ int main(int argc, char **argv) {
   std::cout<<"Allocated Memory "<<std::endl;
 
 
-  if (queryWorkload == "false-positive") {
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
+  if (queryWorkload == "singleton-mixture") {
+    const double f = result["singletonFraction"].as<double>();
+    if (!std::isfinite(f) || f < 0 || f > 1) return 2;
+    auto mix = [randSeed](uint64_t x) {
+      x += randSeed + 0x9e3779b97f4a7c15ULL;
+      x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+      x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+      return x ^ (x >> 31);
+    };
+    for (uint64_t i=0;i<numInserts;++i) insertSet[i]=mix(i);
+    const uint64_t doubles = std::min(numQueries/2, static_cast<uint64_t>(std::llround(numQueries*(1-f)/(2-f))));
+    const uint64_t singles = numQueries-2*doubles;
+    uint64_t pos=0;
+    for(uint64_t i=0;i<singles+doubles;++i) {
+      const uint64_t key=mix(numInserts+i);
+      querySet[pos++]=key;
+      if(i>=singles) querySet[pos++]=key;
+    }
+    std::mt19937_64 shuffleGenerator(randSeed ^ 0xd1b54a32d192ed03ULL);
+    std::shuffle(querySet,querySet+numQueries,shuffleGenerator);
+  } else if (queryWorkload == "false-positive") {
+    fillKeys(insertSet, numInserts);
+    fillKeys(querySet, numQueries);
     uint64_t numQueriesPerRound = numQueries / numRounds;
     for (int r = 0; r < numRounds; r++) {
       for (uint64_t i = 0; i < numQueriesPerRound; i++) {
@@ -195,9 +213,8 @@ int main(int argc, char **argv) {
     }
   } else if (queryWorkload == "normal") {
     uint64_t numUniqueQueries = numQueries/5;
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    std::random_device rd;
-    std::mt19937 gen;
+    fillKeys(insertSet, numInserts);
+    std::mt19937_64 gen(randSeed);
     std::normal_distribution<double> dist(0.0, 1.0);
     std::vector<double> weights;
     double minWeight = std::numeric_limits<double>::max();
@@ -215,9 +232,8 @@ int main(int argc, char **argv) {
     }
   } else if (queryWorkload == "lognormal") {
     uint64_t numUniqueQueries = numQueries/5;
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
-    std::random_device rd;
-    std::mt19937 gen;
+    fillKeys(insertSet, numInserts);
+    std::mt19937_64 gen(randSeed);
     std::lognormal_distribution<double> dist(0.0, 1.0);
     std::vector<double> weights;
     double minWeight = std::numeric_limits<double>::max();
@@ -235,16 +251,10 @@ int main(int argc, char **argv) {
     }
   } else if (queryWorkload == "zipfian") {
     std::cout<<"Generating insert set..."<<std::endl;
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    fillKeys(insertSet, numInserts);
     std::cout<<"Generated insert set!"<<std::endl;
-    std::random_device rd;
-    std::mt19937 gen;
-    std::uniform_int_distribution<uint64_t> dist;
-    RAND_bytes((unsigned char *)querySet, numQueries * sizeof(uint64_t));
-    uint64_t upd = numQueries /100;
-
     std::cout<<"Generating query set"<<std::endl;
-    std::default_random_engine generator;
+    std::mt19937_64 generator(randSeed);
     zipfian_int_distribution<uint64_t> distribution((uint64_t)0, numQueries, zipfConstant);
 
     for (uint64_t i=0; i < numQueries; i++) {
@@ -256,7 +266,7 @@ int main(int argc, char **argv) {
     }
   } else {
     printf("Going to generate insertSet\n");
-    RAND_bytes((unsigned char *)insertSet, numInserts * sizeof(uint64_t));
+    fillKeys(insertSet, numInserts);
 
     uint64_t temp = numQueries;
     uint64_t offset = 0;
@@ -264,15 +274,32 @@ int main(int argc, char **argv) {
     printf("\n");
     while (temp > 0) {
       uint64_t numElements = (temp > block_size) ? block_size : temp;
-      RAND_bytes((unsigned char *)(querySet + offset), numElements * sizeof(uint64_t));
+      fillKeys(querySet + offset, numElements);
       offset = offset + numElements;
       temp = temp - numElements;
       printf("%lu elements generated\n", offset);
     }
   } 
 
-  saveWorkloadToFile(insertSet, numInserts, querySet, numQueries);
-  // saveWorkloadStatsToFile(querySet, numQueries);
+  if (saveWorkloadToFile(insertSet, numInserts, querySet, numQueries) != 0) return 1;
+  if (result["frequencyStats"].as<bool>()) {
+    std::sort(querySet, querySet+numQueries);
+    std::map<uint64_t,uint64_t> histogram;
+    uint64_t unique=0, singles=0, doubles=0;
+    for(uint64_t i=0;i<numQueries;) {
+      uint64_t j=i+1;
+      while(j<numQueries && querySet[j]==querySet[i]) ++j;
+      ++histogram[j-i]; ++unique;
+      singles += j-i==1; doubles += j-i==2; i=j;
+    }
+    std::ofstream h("workload_frequencies.csv"); h << "frequency,distinct_keys\n";
+    for(auto item:histogram) h << item.first << "," << item.second << "\n";
+    std::ofstream out("workload_stats.json");
+    out << std::setprecision(17) << "{\"total_queries\":" << numQueries
+        << ",\"distinct_keys\":" << unique << ",\"singleton_keys\":" << singles
+        << ",\"doubleton_keys\":" << doubles << ",\"singleton_key_fraction\":" << (unique?double(singles)/unique:0)
+        << ",\"singleton_operation_fraction\":" << (numQueries?double(singles)/numQueries:0) << "}\n";
+  }
 
   return 0;
 }

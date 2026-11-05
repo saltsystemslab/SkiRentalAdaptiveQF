@@ -1,0 +1,122 @@
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[hide axis,xmin=0,xmax=1,ymin=0,ymax=1,
+scale only axis,width=1cm,height=0.4cm,
+legend columns=5,legend cell align=left,
+legend style={draw=none,font=\small,at={(0.5,0.5)},anchor=center}]
+\addlegendimage{ybar legend,/tikz/ybar,skiqfNonAdaptiveBar}
+\addlegendentry{Non-adaptive}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfAdaptiveBar}
+\addlegendentry{AdaptiveQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfSkiBar}
+\addlegendentry{SkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfRandomizedBar}
+\addlegendentry{RandomizedSkiQF}
+\addlegendimage{ybar legend,/tikz/ybar,skiqfHybridBar}
+\addlegendentry{HybridSkiQF}
+\end{axis}\end{tikzpicture}
+\par\medskip
+\begingroup
+\pgfmathsetlengthmacro{\skiqfpanelwidth}{(\linewidth-1.6cm-2.0999999999999996cm)/4}
+\begin{tikzpicture}\begin{groupplot}[skiqf axis,
+group style={group size=4 by 2,horizontal sep=0.7cm,vertical sep=1.5cm},
+scale only axis,width=\skiqfpanelwidth,height=3cm,scaled y ticks=true]
+\nextgroupplot[title={Uniform},
+ylabel={Bytes read\\(GiB)},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,6.47436142)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.009880065918)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,2.158126831)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,8.773803711e-05)};
+\nextgroupplot[title={Normal},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.277557373)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.220748901)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.233009338)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.280723572)};
+\nextgroupplot[title={Lognormal},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.854969025)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.248661041)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.454360962)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.855587006)};
+\nextgroupplot[title={Zipfian},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.206054688)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.3466148376)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.6305236816)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,1.214199066)};
+\nextgroupplot[title={Uniform},
+ylabel={Adaptations\\(millions)},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.350934)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.000523)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.116972)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\nextgroupplot[title={Normal},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.069244)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.066087)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.067147)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.069211)};
+\nextgroupplot[title={Lognormal},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.100888)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.067985)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.078868)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.100565)};
+\nextgroupplot[title={Zipfian},
+ymin=0,
+ybar=0,bar width=5pt,enlarge x limits=false,
+xmin=-0.5,xmax=0.5,
+xtick={0},
+xticklabels={},
+x tick label style={rotate=45,anchor=east,font=\scriptsize}]
+\addplot[skiqfNonAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0)};
+\addplot[skiqfAdaptiveBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.065587)};
+\addplot[skiqfSkiBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.018874)};
+\addplot[skiqfRandomizedBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.034238)};
+\addplot[skiqfHybridBar,mark size=1.8pt,mark repeat=1] coordinates {(0,0.065138)};
+\end{groupplot}\end{tikzpicture}\endgroup\end{center}

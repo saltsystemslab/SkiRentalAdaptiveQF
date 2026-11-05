@@ -1,0 +1,25 @@
+% Adapted from Paper-code/SkiRentalForAdaptivity/camready/main.tex and plots/.
+% Names are scoped so these snippets can also be included in the original paper.
+\usepackage{pgfplots,booktabs,graphicx}
+\usepgfplotslibrary{groupplots}
+\usetikzlibrary{plotmarks}
+\pgfplotsset{compat=1.18,
+  skiqf axis/.style={
+    label style={font=\small,align=center},
+    tick label style={font=\scriptsize},
+    title style={font=\small,align=center},
+    legend style={font=\small,draw=none},
+    grid=major,grid style={line width=.2pt,draw=gray!50},
+    scaled ticks=false,
+  },
+  skiqfNonAdaptive/.style={color=gray,mark=pentagon*,mark options={color=gray}},
+  skiqfAdaptive/.style={color=cyan,mark=square*,mark options={color=cyan}},
+  skiqfSki/.style={color=magenta,mark=halfcircle*,mark options={color=magenta}},
+  skiqfRandomized/.style={color=orange,mark=star,mark options={color=orange}},
+  skiqfHybrid/.style={color=blue,mark=halfsquare*,mark options={color=blue}},
+  skiqfNonAdaptiveBar/.style={fill=lightgray,draw=lightgray},
+  skiqfAdaptiveBar/.style={fill=cyan,draw=cyan},
+  skiqfSkiBar/.style={fill=magenta,draw=magenta},
+  skiqfRandomizedBar/.style={fill=orange,draw=orange},
+  skiqfHybridBar/.style={fill=blue,draw=blue},
+}

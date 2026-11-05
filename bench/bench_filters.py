@@ -73,13 +73,17 @@ def test_config():
     storage_sleep_us = 0
     reverse_sleep_us = 0
     filter_names = DEFAULT_FILTERS
-    adversary_window_size = 100000
+    hybrid_window_size = 1_000_000
     work_dir = "./sponge"
+    singleton_fraction = 0.5
+    collect_workload_stats = False
     seed = 741262640
 
 
 @ex.capture
 def run_filter_bench(
+    singleton_fraction,
+    collect_workload_stats,
     quotient_bits,
     remainder_bits,
     num_queries,
@@ -109,7 +113,7 @@ def run_filter_bench(
     storage_sleep_us,
     reverse_sleep_us,
     filter_names,
-    adversary_window_size,
+    hybrid_window_size,
     work_dir,
 ):
     work_dir = os.path.abspath(work_dir)
@@ -122,6 +126,8 @@ def run_filter_bench(
         raise ValueError("filter_names must select at least one filter")
     if break_even < 1:
         raise ValueError("break_even must be at least 1")
+    if hybrid_window_size < 1:
+        raise ValueError("hybrid_window_size must be positive")
     if not 1 <= adv_freq <= 100:
         raise ValueError("adv_freq must be between 1 and 100")
     if num_rounds < 1:
@@ -134,15 +140,8 @@ def run_filter_bench(
         raise ValueError(
             "phased tests require num_phases <= num_rounds and evenly dividing it"
         )
-    if query_workload == "adaptive-adversarial":
-        if not 0 < adversary_window_size < 1_000_000:
-            raise ValueError(
-                "adversary_window_size must be between 1 and 999999"
-            )
-        if is_phased_test:
-            raise ValueError(
-                "adaptive-adversarial and is_phased_test are separate modes"
-            )
+    if query_workload == "adaptive-adversarial" and is_phased_test:
+        raise ValueError("adaptive-adversarial and is_phased_test are separate modes")
     if is_insert_test:
         filters=['adaptive', 'nonAdaptive']
 
@@ -169,7 +168,7 @@ def run_filter_bench(
     ex.add_artifact(log_file_path)
     if ret.returncode != 0:
         print("Workload-Generator build failed, check %s" % log_file_path)
-        return
+        raise subprocess.CalledProcessError(ret.returncode, cmd)
 
     ### Generate Workload
     cmd = str(BUILD_DIR / "workload_gen")
@@ -185,6 +184,9 @@ def run_filter_bench(
     }
     for arg_name in argDict:
         cmd = cmd + (" %s %s" % (arg_name, argDict[arg_name]))
+    cmd += " --singletonFraction %s" % singleton_fraction
+    if collect_workload_stats:
+        cmd += " --frequencyStats"
     if hash_again_for_zipfian:
         cmd = cmd + " --hashAgainForZipfian"
 
@@ -196,37 +198,28 @@ def run_filter_bench(
     ex.add_artifact(log_file_path)
     if ret.returncode != 0:
         print("Generating workload failed! Check: " + log_file_path)
-        exit()
+        raise subprocess.CalledProcessError(ret.returncode, cmd)
+    if collect_workload_stats:
+        for name in ["workload_stats.json", "workload_frequencies.csv"]:
+            ex.add_artifact(os.path.join(work_dir, name))
     #ex.add_artifact("queryStats")
     #ex.add_artifact("rankFreq")
 
     if workload_only:
         return
 
-    ### Build benchmark
+    # One binary dispatches all filters at runtime. Build once per test.
+    build_cmd = "make bench_variants" + extra_build_flags
+    log_file_path = os.path.join(work_dir, "benchmark-build.log")
+    with open(log_file_path, "w") as log_file:
+        ret = subprocess.run(
+            build_cmd, shell=True, stdout=log_file, stderr=subprocess.STDOUT
+        )
+    ex.add_artifact(log_file_path)
+    if ret.returncode != 0:
+        raise subprocess.CalledProcessError(ret.returncode, build_cmd)
+
     for filter in filters:
-        build_cmd = ""
-        log_file_path = os.path.join(work_dir, filter + "_build.log")
-        if filter == "nonAdaptive":
-            build_cmd = (
-                "make clean && make bench_variants" + extra_build_flags # ADD USE_CQF=1 if you want to use original CQF code.
-            )
-        else:
-            build_cmd = "make clean && make bench_variants" + extra_build_flags
-
-        with open(log_file_path, "w") as log_file:
-            with tqdm(
-                desc="\nBuilding benchmark for " + filter + "\n" + build_cmd,
-                bar_format="{desc}\nElapsed:{elapsed}",
-            ) as pbar:
-                ret = subprocess.run(
-                    build_cmd, shell=True, stdout=log_file, stderr=subprocess.STDOUT
-                )
-        ex.add_artifact(log_file_path)
-        if ret.returncode != 0:
-            print("Building benchmark failed! Check " + log_file_path)
-            exit()
-
         ### Running benchmark
         filter_storage_cache_size_mb = storage_cache_for_filter(
             filter, storage_cache_size_mb, reverse_map_cache_size_mb
@@ -245,8 +238,8 @@ def run_filter_bench(
             "--reverseSleepUs": reverse_sleep_us,
             "--advFreq": adv_freq,
             "--breakEven": break_even,
+            "--hybridWindowSize": hybrid_window_size,
             "--numPhases": num_phases,
-            "--adaptiveAdversaryWindowSize": adversary_window_size,
             "--seed": seed,
         }
         cmd = "%s --filter %s " % (BUILD_DIR / "bench_variants", filter)
@@ -278,7 +271,7 @@ def run_filter_bench(
             ret = subprocess.run(cmd, cwd=work_dir, shell=True, stderr=subprocess.STDOUT)
         if ret.returncode != 0:
             print("Benchmark failed!")
-            exit()
+            raise subprocess.CalledProcessError(ret.returncode, cmd)
 
         csv_path = os.path.join(work_dir, '%s.csv' % filter)
         summary_path = os.path.join(work_dir, '%s_summary.csv' % filter)
@@ -287,6 +280,8 @@ def run_filter_bench(
 
         ex.add_artifact(csv_path)
         ex.add_artifact(summary_path)
+        if query_workload == "adaptive-adversarial":
+            ex.add_artifact(os.path.join(work_dir, f"{filter}_adversary.csv"))
         if capture_extra_stats:
             ex.add_artifact(latency_path)
             ex.add_artifact(fp_stats_path)
