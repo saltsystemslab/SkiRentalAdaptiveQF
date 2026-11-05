@@ -9,6 +9,10 @@ BUILD = Path(__file__).resolve().parents[1] / "sponge/build"
 
 class NonadaptiveBaselineTest(unittest.TestCase):
     def test_no_reverse_database_for_either_engine_recipe(self):
+        """Run the real nonadaptive benchmark and verify it opens only the forward database.
+
+        Neither reverse-map engine setting should create reverse-map storage.
+        """
         for reverse_engine in ["wiredTiger", "splinterDB"]:
             with self.subTest(engine=reverse_engine), tempfile.TemporaryDirectory() as scratch:
                 root = Path(scratch)

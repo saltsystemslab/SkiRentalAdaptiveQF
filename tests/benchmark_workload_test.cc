@@ -131,6 +131,8 @@ WorkloadStats run(
   return stats;
 }
 
+// Check that ordinary workloads preserve query order, skip database access for negatives,
+// and adapt only confirmed false positives while recording the corresponding statistics.
 bool test_standard() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 7, 8, 1, 7, 9};
@@ -153,6 +155,8 @@ bool test_standard() {
   return passed;
 }
 
+// Check the fixed adversary's FIFO replay order and removal of corrected candidates,
+// including the exact database accesses and replay/adaptation totals.
 bool test_fifo_and_retirement() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 2, 9, 9, 9, 9, 9, 9};
@@ -172,6 +176,8 @@ bool test_fifo_and_retirement() {
   return passed;
 }
 
+// Preserve the fixed adversary's historical handling of repeated observations in its deque.
+// Check the resulting replay order and frequency; this pool intentionally permits duplicates.
 bool test_repeated_observations() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 1, 2, 9, 9, 9, 9, 9, 9, 9};
@@ -187,6 +193,8 @@ bool test_repeated_observations() {
   return passed;
 }
 
+// Ensure a filter-positive query found in the database never enters the replay pool.
+// Only confirmed false positives may become adversarial candidates.
 bool test_true_positives_not_admitted() {
   bool passed = true;
   std::vector<uint64_t> queries{7, 1, 9, 9};
@@ -201,6 +209,8 @@ bool test_true_positives_not_admitted() {
   return passed;
 }
 
+// Check both uniform-first and adversarial-first schedules against exact query sequences,
+// so phase boundaries and replay counts remain unchanged during benchmark refactoring.
 bool test_phases() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 9, 2, 9, 9, 9, 9, 9};
@@ -226,6 +236,8 @@ bool test_phases() {
   return passed;
 }
 
+// Check that reporting intervals cover every query when the budget is not divisible
+// by the number of rounds, with correct boundaries and per-round false-positive counts.
 bool test_uneven_measurements() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
@@ -248,6 +260,8 @@ bool test_uneven_measurements() {
   return passed;
 }
 
+// Check the minimum and maximum reporting frequencies without changing query execution.
+// Verify boundary arithmetic also handles query counts near the uint64_t limit.
 bool test_measurement_limits() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 2, 3, 4};
@@ -271,6 +285,8 @@ bool test_measurement_limits() {
   return passed;
 }
 
+// Check both phase orders with uneven query partitions, including the trailing queries.
+// Measurement boundaries must not alter the intended phase-specific replay sequence.
 bool test_uneven_phases() {
   bool passed = true;
   std::vector<uint64_t> queries{1, 9, 2, 9, 9, 9, 9, 9, 9, 9};
@@ -296,6 +312,8 @@ bool test_uneven_phases() {
   return passed;
 }
 
+// Verify the filter-only microbenchmark queries the intended inserted and workload keys.
+// It must not call adaptation, and its elapsed-time measurements must be nonnegative.
 bool test_microbenchmark_workload() {
   std::vector<uint64_t> inserts = {1, 2, 3};
   std::vector<uint64_t> queries = {1, 9, 10, 11};

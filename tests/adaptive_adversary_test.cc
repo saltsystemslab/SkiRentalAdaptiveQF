@@ -67,6 +67,8 @@ WorkloadStats run(std::vector<uint64_t> keys, Filter& filter, Database& db,
   return stats;
 }
 
+// Use scripted corrections to check that feedback changes the very next eligible query.
+// Replays preserve the fresh-query cursor, and reporting frequency cannot change execution.
 void immediate_feedback_and_cursor() {
   for (uint64_t rounds : {1, 2, 4, 8}) {
     Filter filter; Database db;
@@ -83,6 +85,8 @@ void immediate_feedback_and_cursor() {
   }
 }
 
+// Check that a filter correcting every false positive keeps replay disabled throughout.
+// Corrected keys must never be queued or require extra confirmation probes.
 void always_adapts() {
   Filter filter; Database db;
   filter.positive = {1, 2, 3, 4}; filter.policy = [](size_t) { return 1; };
@@ -93,6 +97,8 @@ void always_adapts() {
     require(!e.repeatBefore && !e.repeatAfter && !e.activeCandidates, "Corrected key was queued");
 }
 
+// Check replay-slot spacing and FIFO rotation while the filter tolerates false positives.
+// Repeated observations must be deduplicated, and ordinary negatives must retain the replay flag.
 void tolerance_and_fifo() {
   Filter filter; Database db; filter.positive = {1, 2};
   auto stats = run({1, 1, 2, 9, 9, 9, 9, 9, 9, 9}, filter, db, 3);
@@ -103,6 +109,8 @@ void tolerance_and_fifo() {
   require(stats.adversarialQueries == 3, "Unexpected extra probes");
 }
 
+// Retire a replay candidate that becomes a filter negative or a true database hit.
+// An empty pool falls back to fresh queries without changing the last observed policy flag.
 void negative_and_present_retirement() {
   for (bool present : {false, true}) {
     Filter filter; Database db; filter.positive = {1};
@@ -115,6 +123,8 @@ void negative_and_present_retirement() {
   }
 }
 
+// Script a switch from tolerance to correction and back, and check the exact query sequence.
+// The adversary must recognize both changes through ordinary query outcomes.
 void delayed_switches() {
   Filter filter; Database db; filter.positive = {1, 2, 3, 4};
   filter.policy = [](size_t query) { return query >= 3 && query <= 5 ? 1 : 0; };
@@ -124,6 +134,8 @@ void delayed_switches() {
   require(stats.adapts == 3 && stats.adversarialQueries == 4, "Wrong delayed-switch counts");
 }
 
+// Check that adaptation failure aborts with the offending query position.
+// A failed correction must not be mistaken for a deliberate decision to tolerate.
 void failure_is_explicit() {
   Filter filter; Database db; filter.positive = {1}; filter.fallback = -1;
   bool failed = false;

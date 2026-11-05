@@ -12,6 +12,10 @@ from run import recipes, select_cases
 
 class AdaptiveFeedbackReportTest(unittest.TestCase):
     def test_medium_recipe(self):
+        """Keep the medium adversary at q=24, 30M queries, and a 100K detector window.
+
+        Check that the other sizes retain the historical 1M detector window.
+        """
         case, = select_cases(recipes("medium", 741262640), ["adaptive-adversary"])
         self.assertEqual(case["id"], "adaptive-adversary/immediate-feedback")
         self.assertEqual(case["config"]["num_queries"], 30_000_000)
@@ -24,6 +28,10 @@ class AdaptiveFeedbackReportTest(unittest.TestCase):
             self.assertEqual(other["config"]["hybrid_window_size"], 1_000_000)
 
     def test_trace_accounting_and_intervals(self):
+        """Reconstruct replay-enabled intervals, switches, and corrections from a known trace.
+
+        Reject a correction event that incorrectly leaves replay enabled.
+        """
         with tempfile.TemporaryDirectory() as scratch:
             trace = Path(scratch) / "trace.csv"
             trace.write_text(
@@ -44,6 +52,10 @@ class AdaptiveFeedbackReportTest(unittest.TestCase):
                 read_adversary(trace, dict(num_queries=10, num_rounds=2, adv_freq=50))
 
     def test_current_and_historical_report_labels(self):
+        """Distinguish immediate-feedback results from historical window-based adversaries.
+
+        Use the saved configuration in captions and preserve plotted measurements.
+        """
         for window in [None, 100, 100_000]:
             with self.subTest(window=window), tempfile.TemporaryDirectory() as scratch:
                 root = Path(scratch)

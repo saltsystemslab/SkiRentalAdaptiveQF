@@ -19,7 +19,10 @@ bool expect(bool condition, const char *message) {
 
 } // namespace
 
+// Check policy boundary cases and selected exact conditional purchase probabilities.
+// Also verify seed reproducibility; this does not test the full filter or empirical cost ratios.
 int main() {
+  // Zero count must not adapt; a purchase cost of one must adapt immediately.
   bool passed = true;
   passed &= expect(
       RandomizedSkiRentalPolicy::adaptationProbability(0, 5) == 0.0,
@@ -28,6 +31,7 @@ int main() {
       RandomizedSkiRentalPolicy::adaptationProbability(1, 1) == 1.0,
       "B=1 must adapt immediately");
 
+  // At B=2, buy with probability 1/3 on the first occurrence and certainly on the second.
   passed &= expect(
       approximatelyEqual(
           RandomizedSkiRentalPolicy::adaptationProbability(1, 2),
@@ -37,6 +41,7 @@ int main() {
       RandomizedSkiRentalPolicy::adaptationProbability(2, 2) == 1.0,
       "B=2 must adapt on the second occurrence");
 
+  // Check early/late probabilities for B=5 and forced purchase at or beyond the threshold.
   passed &= expect(
       approximatelyEqual(
           RandomizedSkiRentalPolicy::adaptationProbability(1, 5),
@@ -54,6 +59,7 @@ int main() {
       RandomizedSkiRentalPolicy::adaptationProbability(8, 5) == 1.0,
       "counts beyond B must adapt");
 
+  // Identical seeds and count sequences must produce identical decisions.
   RandomizedSkiRentalPolicy first;
   RandomizedSkiRentalPolicy second;
   first.seed(741262640);

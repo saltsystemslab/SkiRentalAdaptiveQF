@@ -39,16 +39,20 @@ int query_false_positive(Filter& filter) {
   return filter.adapt(falsePositive, &result);
 }
 
+// Exercise the real Hybrid filter with an in-memory reverse map to check detector timing,
+// successful correction, counting of true negatives, and rejection of an empty window.
 int main() {
   try {
     QFilterConfig config{12, 8, 2, 0.95, {4, 0, false, true}, 42};
     require(config.hybridWindowSize == 1'000'000, "Historical default changed");
+    // The default detector must still tolerate the first 100K repeated false positives.
     Filter historical;
     initialize(historical, config);
     for (int i = 0; i < 100'000; ++i)
       require(query_false_positive(historical) == 0, "Default detector switched before a million queries");
     historical.close();
 
+    // A configured 100K boundary must trigger correction exactly at that count.
     config.hybridWindowSize = 100'000;
     Filter medium;
     initialize(medium, config);
@@ -60,6 +64,7 @@ int main() {
     require(!corrected.key_present, "Reported correction did not fix the query");
     medium.close();
 
+    // True negatives must advance the detection window alongside false positives.
     config.hybridWindowSize = 16;
     Filter mixed;
     initialize(mixed, config);
@@ -73,6 +78,7 @@ int main() {
     require(query_false_positive(mixed) == 1, "True negatives did not advance the detector window");
     mixed.close();
 
+    // Reject a zero-length detector window at construction.
     config.hybridWindowSize = 0;
     Filter invalid;
     require(invalid.construct(config) == -1, "Zero-length detector window was accepted");

@@ -17,6 +17,10 @@ from paper_report import build_paper_sections, comparison_table, round_series
 
 class ExperimentRunnerTest(unittest.TestCase):
     def test_recipe_matrix_and_presets(self):
+        """Check case IDs, size presets, and filter/cache overrides.
+
+        Reject unknown selections and avoid running overlapping selections twice.
+        """
         for size, (qbits, queries) in runner.PRESETS.items():
             cases = runner.recipes(size, 42)
             self.assertEqual(len(cases), 43)
@@ -34,6 +38,10 @@ class ExperimentRunnerTest(unittest.TestCase):
             runner.select_cases(cases, ["unknown"])
 
     def test_parse_whitespace_rounds_and_text_summary(self):
+        """Parse benchmark artifacts with correct cumulative throughput and I/O units.
+
+        Reject incomplete round data and label failed or unstarted cases in reports.
+        """
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             (root / "skiQF.csv").write_text(
@@ -77,6 +85,10 @@ class ExperimentRunnerTest(unittest.TestCase):
             self.assertTrue((root / "metrics.csv").is_file())
 
     def test_paper_grouping_units_phase_boundaries_and_paired_baselines(self):
+        """Check plot coordinates, unit conversions, phase shading, and portable paths.
+
+        Compare each repetition with its matching baseline and omit missing measurements.
+        """
         config = dict(num_queries=100, num_rounds=2, num_phases=4,
                       start_with_adversarial_phase=False)
         rounds = [dict(round_thput=4, round_fp=1, load_factor=0.9),
@@ -120,6 +132,10 @@ class ExperimentRunnerTest(unittest.TestCase):
         self.assertIn(r"45 $\pm$ 7.07", table)  # Paired 50%, 40%; not a ratio of means.
 
     def test_adaptive_report_uses_saved_window_and_case(self):
+        """Render historical adversary cases using their recorded observation windows
+
+        and query counts, rather than substituting the current experiment defaults.
+        """
         for window in [100, 100_000]:
             with self.subTest(window=window), tempfile.TemporaryDirectory() as scratch:
                 root = Path(scratch)
@@ -135,6 +151,10 @@ class ExperimentRunnerTest(unittest.TestCase):
                 self.assertIn("(5e-05,4)", (root / "adaptive-adversary-trajectories.tex").read_text())
 
     def test_failures_continue_and_existing_results_are_protected(self):
+        """Record a failed case while continuing subsequent cases, even without Git metadata.
+
+        Refuse an existing output directory so prior results cannot be overwritten.
+        """
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch) / "run"
             args = argparse.Namespace(size="small", seed=42, repetitions=1,

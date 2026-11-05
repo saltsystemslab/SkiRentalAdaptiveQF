@@ -11,6 +11,10 @@ BINARY = Path(__file__).resolve().parents[1] / "sponge/build/workload_gen"
 
 class WorkloadGenerationTest(unittest.TestCase):
     def test_singleton_mixtures(self):
+        """Generate all five singleton mixtures and inspect actual key multiplicities and stats.
+
+        Check query budgets, absence from the insert set, rounding, and seeded reproducibility.
+        """
         import collections
         import json
         for fraction in [0, .25, .5, .75, 1]:
@@ -34,6 +38,10 @@ class WorkloadGenerationTest(unittest.TestCase):
                 self.assertEqual(digest, (root/"querySet").read_bytes())
 
     def test_seeded_workloads_and_shorter_file_reuse(self):
+        """Check seeded distribution files for reproducibility and valid lengths/headers.
+
+        Regenerating a shorter workload must truncate stale queries from the prior file.
+        """
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
 
