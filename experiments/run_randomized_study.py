@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Execute the selected study, enforcing a complete medium report before large."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -11,8 +12,7 @@ from run import ROOT, validate_artifacts
 from report import read_metrics, tex
 from paper_report import build_paper_sections
 
-DOCUMENT_ROOT = (ROOT.parents[1] if (ROOT.parents[1] / 'randomized-ski-qf.tex').is_file()
-                 else ROOT / 'reports/randomized-skiqf')
+DOCUMENT_ROOT = ROOT / 'reports/randomized-skiqf'
 FAMILIES = ['distributions', 'adaptive-adversary', 'singleton-mixture']
 
 
@@ -52,6 +52,7 @@ def update_document(bundles):
                             + f"{100*stats['singleton_key_fraction']:.2f}\\%, singleton operations {100*stats['singleton_operation_fraction']:.2f}\\%; "
                             + ('initial-FP singleton keys unavailable; ' if baseline is None else f'initial-FP singleton keys {100*baseline:.2f}\\%; ')
                             + f'randomized/deterministic throughput {rand/det:.3f}.\\par')
+        (bundle/'paper').mkdir(parents=True, exist_ok=True)
         plot_body, _ = build_paper_sections(groups, bundle/'paper')
         relative = Path(os.path.relpath(bundle/'paper', DOCUMENT_ROOT)).as_posix()
         body.extend(line.replace('\\input{paper/', '\\input{'+relative+'/') for line in plot_body)
@@ -64,6 +65,13 @@ def update_document(bundles):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--report-only', nargs='+', type=Path, metavar='BUNDLE',
+                        help='Regenerate the report from completed bundles without running experiments.')
+    args = parser.parse_args()
+    if args.report_only:
+        update_document([bundle.resolve() for bundle in args.report_only])
+        return
     bundles = []
     for size in ['medium','large']:
         bundle = ROOT/'sponge/tods'/f'randomized-{size}'

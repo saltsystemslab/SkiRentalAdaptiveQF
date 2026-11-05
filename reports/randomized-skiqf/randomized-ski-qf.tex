@@ -269,10 +269,26 @@ Execute from the benchmark worktree using:
   adaptive-adversary singleton-mixture --size medium --repetitions 1 \
   --output sponge/tods/randomized-medium
 \end{verbatim}
-The lines above form one shell command. The staged entry point \texttt{.venv/bin/python} \path{experiments/run_randomized_study.py} enforces the medium-completion gate, updates this document with generated plots, and then executes large. Its execution log is \path{/tmp/randomized-study-execution.log}. After medium completion and report validation, use the same selection with \texttt{--size large} and a fresh \texttt{randomized-large} output directory. No other experiment families are selected.
+The lines above form one shell command. Alternatively, the staged entry point below runs medium, validates every case and builds this report, and only then runs large:
+\begin{verbatim}
+.venv/bin/python experiments/run_randomized_study.py
+\end{verbatim}
+The staged runner requires fresh output directories and selects no other experiment families.
+
+Only report sources, plot styles, experiment recipes, and generation code are versioned. PDFs, generated plot coordinates, and measured results remain local. To regenerate the report from completed bundles without rerunning benchmarks, execute from the repository root:
+\begin{verbatim}
+.venv/bin/python experiments/run_randomized_study.py --report-only \
+  sponge/tods/randomized-medium sponge/tods/randomized-large
+\end{verbatim}
+A single completed medium bundle can also be supplied. Retain the full bundles and any artifact directories referenced by their manifests. The generator validates these artifacts, uses the existing shared plot layouts, and writes the results include and PDF under \path{reports/randomized-skiqf/}. Python reporting dependencies and \texttt{pdflatex} with PGFPlots are required.
+
+The explanation also builds without experiment results. From \path{reports/randomized-skiqf/}, run the following command twice:
+\begin{verbatim}
+pdflatex -interaction=nonstopmode -halt-on-error randomized-ski-qf.tex
+\end{verbatim}
 
 \section{Measured results}
-\IfFileExists{randomized-experiment-results.tex}{\input{randomized-experiment-results.tex}}{Medium validation and execution are pending. No large experiment has started.}
+\IfFileExists{randomized-experiment-results.tex}{\input{randomized-experiment-results.tex}}{No locally generated results are available. Use the report-generation command above to include measurements from completed experiment bundles.}
 
 \begin{thebibliography}{9}
 \bibitem{karlin} A. R. Karlin, M. S. Manasse, L. A. McGeoch, and S. Owicki, \emph{Competitive Randomized Algorithms for Non-Uniform Problems}, SODA 1990, pp. 301--309, especially Theorem 1, p. 303. \url{https://courses.csail.mit.edu/6.895/fall03/handouts/papers/karlin.pdf}.

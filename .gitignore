@@ -28,3 +28,14 @@ __pycache__/
 sponge/
 .venv/
 external
+
+# Generated reports and experiment snapshots stay local.
+*.pdf
+*.aux
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+/reports/randomized-skiqf/data/
+/reports/randomized-skiqf/figures/
+/reports/randomized-skiqf/randomized-experiment-results.tex
