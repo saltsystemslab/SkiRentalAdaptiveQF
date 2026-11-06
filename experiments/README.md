@@ -172,3 +172,36 @@ make workload_gen bench_variants randomized_policy_test benchmark_workload_test
 ./sponge/build/benchmark_workload_test
 .venv/bin/python -m unittest discover -s tests -p '*_test.py'
 ```
+
+## Full medium suite followed by large
+
+Run from the repository root, using fresh output directories:
+
+```bash
+.venv/bin/python experiments/run.py run --tests all --size medium \
+  --progress --no-pdf --output sponge/tods/full-medium &&
+.venv/bin/python experiments/run.py run --tests all --size large \
+  --progress --no-pdf --output sponge/tods/full-large
+```
+
+`all` currently selects 43 cases, including the singleton-mixture study. The
+large command starts only if the medium runner succeeds; failed cases make the
+medium runner exit unsuccessfully. Both commands generate report sources.
+Omit `--no-pdf` to also compile PDFs when LaTeX is installed. Use `report BUNDLE`
+to regenerate a report later. Runs share scratch storage: do not run them concurrently.
+
+`--progress` displays elapsed time for each construction stage and query counts
+at the existing reporting boundaries (normally 100 updates per filter). Bulk
+loading exposes no intermediate counts, so its display has no percentage or ETA.
+Setup, workload generation, and compilation share an elapsed-time display.
+Finalization includes supplementary filter-only microbenchmarks, which do not
+expose intermediate query counts. Displayed elapsed times include observer polling delays and are not benchmark
+timing measurements; use the saved metrics for analysis.
+
+The display monitors execution logs once per second in a Python thread and
+makes benchmark stdout line-buffered. It adds no per-query callbacks, but log
+flushing and display activity still have overhead, including possible contention
+when all processes are pinned to one CPU. The impact has not been quantified.
+Omit `--progress` for the existing logging behavior and keep the setting consistent
+across comparisons; the bundle manifest records it. Keep raw measurements when
+normalizing or smoothing plots, and identify any smoothing explicitly.

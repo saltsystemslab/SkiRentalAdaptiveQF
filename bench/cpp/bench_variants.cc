@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <stdio.h>
 #include <algorithm>
@@ -161,6 +162,8 @@ int run_benchmark_with_storage_engine(
 }
 
 int main(int argc, char **argv) {
+  // Optional live log monitoring: flush existing lines, with no per-query output.
+  if (std::getenv("SKIQF_PROGRESS")) setvbuf(stdout, nullptr, _IOLBF, BUFSIZ);
   cxxopts::Options options("Bench adaptive filter variants");
 
   options.add_options()(

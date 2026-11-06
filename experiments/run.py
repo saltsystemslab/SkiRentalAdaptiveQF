@@ -2,6 +2,8 @@
 """Sequential TODS experiment recipes and result collection."""
 
 import argparse
+from contextlib import nullcontext
+import os
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -170,6 +172,7 @@ def run(args):
         # A copied source tree can run without the worktree's local .git pointer.
         revision, dirty = "unknown", None
     summary = dict(size=args.size, seed=args.seed, repetitions=args.repetitions,
+                   progress=getattr(args, "progress", False),
                    source_revision=revision, source_dirty=dirty, host=platform.node(),
                    platform=platform.platform(), started=timestamp(), status="RUNNING",
                    selected_cases=[case["id"] for case in cases], cases=[])
@@ -189,8 +192,17 @@ def run(args):
                 print(f"[{len(summary['cases'])}/{len(cases) * args.repetitions}] {case['id']} "
                       f"({args.size}, seed={config['seed']})", flush=True)
                 try:
+                    progress_enabled = getattr(args, "progress", False)
+                    environment = os.environ.copy()
+                    if progress_enabled:
+                        environment["SKIQF_PROGRESS"] = "1"
+                        environment["PYTHONUNBUFFERED"] = "1"
+                        from progress import CaseProgress
                     with (directory / "execution.log").open("w") as log:
-                        subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
+                        monitor = CaseProgress(directory / "execution.log", config) if progress_enabled else nullcontext()
+                        with monitor:
+                            subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+                                           check=True, env=environment)
                     # Sacred copies registered artifacts out of shared sponge immediately.
                     artifact_dir = directory / "1"
                     record["artifacts"] = str(artifact_dir.relative_to(output))
@@ -227,6 +239,8 @@ def main():
     runner.add_argument("--repetitions", type=int, default=1)
     runner.add_argument("--output", type=Path, required=True)
     runner.add_argument("--dry-run", action="store_true")
+    runner.add_argument("--progress", action="store_true",
+                        help="Show construction elapsed time and query progress from reporting rounds")
     runner.add_argument("--no-pdf", action="store_true")
     report = sub.add_parser("report", help="Regenerate LaTeX from an existing run")
     report.add_argument("output", type=Path)
